@@ -5,7 +5,7 @@
 
 import { Routes, Route, Navigate } from 'react-router';
 import { useEffect } from 'react';
-import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { db, auth } from './lib/firebase';
 import { Layout } from './components/Layout';
@@ -29,7 +29,33 @@ export default function App() {
         if (docSnap.exists()) {
           setCurrentUser(docSnap.data() as any);
           useAppStore.setState({ hasEnteredApp: true });
+        } else {
+          // Safe fallback: Auto-create Firestore document if it does not exist yet
+          const role: 'user' | 'admin' = user.email?.includes('admin') ? 'admin' : 'user';
+          const userDoc = {
+            id: user.uid,
+            name: user.displayName || user.email?.split('@')[0] || 'Usuario',
+            email: user.email || '',
+            role: role,
+            department: 'General'
+          };
+          setDoc(userRef, userDoc, { merge: true }).then(() => {
+            setCurrentUser(userDoc);
+            useAppStore.setState({ hasEnteredApp: true });
+          });
         }
+      }).catch((err) => {
+        console.error("Error loading user profile:", err);
+        // Fallback to local state if Firestore query fails so the user can still use the app
+        const role: 'user' | 'admin' = user.email?.includes('admin') ? 'admin' : 'user';
+        setCurrentUser({
+          id: user.uid,
+          name: user.displayName || user.email?.split('@')[0] || 'Usuario',
+          email: user.email || '',
+          role: role,
+          department: 'General'
+        });
+        useAppStore.setState({ hasEnteredApp: true });
       });
       
       // Subscribe to rendiciones
