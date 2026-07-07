@@ -5,7 +5,7 @@
 
 import { Routes, Route, Navigate } from 'react-router';
 import { useEffect } from 'react';
-import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc, where } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { db, auth } from './lib/firebase';
 import { Layout } from './components/Layout';
@@ -21,9 +21,9 @@ export default function App() {
   const { currentUser, hasEnteredApp, setCurrentUser } = useAppStore();
   const [user, loading] = useAuthState(auth);
 
+  // 1. Effect to load and sync user profile
   useEffect(() => {
     if (user) {
-      // Load user profile
       const userRef = doc(db, 'users', user.uid);
       getDoc(userRef).then((docSnap) => {
         if (docSnap.exists()) {
@@ -42,6 +42,10 @@ export default function App() {
           setDoc(userRef, userDoc, { merge: true }).then(() => {
             setCurrentUser(userDoc);
             useAppStore.setState({ hasEnteredApp: true });
+          }).catch((err) => {
+            console.error("Error creating user profile in Firestore:", err);
+            setCurrentUser(userDoc);
+            useAppStore.setState({ hasEnteredApp: true });
           });
         }
       }).catch((err) => {
@@ -57,25 +61,51 @@ export default function App() {
         });
         useAppStore.setState({ hasEnteredApp: true });
       });
-      
-      // Subscribe to rendiciones
-      const rendicionesRef = collection(db, 'rendiciones');
-      const q = query(rendicionesRef, orderBy('createdAt', 'desc'));
-      
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const rendiciones = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          id: doc.id
-        })) as Rendicion[];
-        
-        useAppStore.setState({ rendiciones });
-      });
-
-      return () => unsubscribe();
     } else {
       useAppStore.setState({ hasEnteredApp: false });
     }
   }, [user]);
+
+  // 2. Effect to subscribe to rendiciones safely
+  useEffect(() => {
+    if (!user || !currentUser || currentUser.id !== user.uid) return;
+
+    let q;
+    if (currentUser.role === 'admin') {
+      // Admin can view everything, ordered by creation date
+      q = query(collection(db, 'rendiciones'), orderBy('createdAt', 'desc'));
+    } else {
+      // Normal user can only view their own rendiciones (required by Firestore Rules)
+      // We query without ordering to avoid needing a composite index in Firestore
+      q = query(collection(db, 'rendiciones'), where('userId', '==', user.uid));
+    }
+
+    const unsubscribe = onSnapshot(
+      q, 
+      (snapshot) => {
+        let rendiciones = snapshot.docs.map(doc => ({
+          ...doc.data(),
+          id: doc.id
+        })) as Rendicion[];
+
+        // Sort client-side for regular users since we didn't specify orderBy in query
+        if (currentUser.role !== 'admin') {
+          rendiciones.sort((a, b) => {
+            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return dateB - dateA; // Descending
+          });
+        }
+        
+        useAppStore.setState({ rendiciones });
+      },
+      (error) => {
+        console.error("Error subscribing to rendiciones:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, currentUser?.id, currentUser?.role]);
 
   if (loading) {
     return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Cargando...</div>;
