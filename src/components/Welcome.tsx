@@ -1,23 +1,19 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../lib/store';
 import { 
-  signInWithPopup, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword 
+  signInWithPopup 
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../lib/firebase';
-import { Mail, Lock, User, Chrome, AlertCircle } from 'lucide-react';
+import { User, AlertCircle, Briefcase, Key, Check } from 'lucide-react';
 
 export function Welcome() {
   const { settings, enterApp, setCurrentUser } = useAppStore();
   const [loading, setLoading] = useState(false);
-  const [authMode, setAuthMode] = useState<'google' | 'email-login' | 'email-register'>('email-login');
   
-  // Email & Password States
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  // Local Access States
+  const [customName, setCustomName] = useState('');
+  const [selectedRole, setSelectedRole] = useState<'user' | 'admin'>('user');
   const [errorMessage, setErrorMessage] = useState('');
 
   const handleGoogleLogin = async () => {
@@ -42,7 +38,7 @@ export function Welcome() {
     } catch (error: any) {
       console.error("Error signing in with Google:", error);
       if (error.code === 'auth/popup-blocked') {
-        setErrorMessage('El navegador bloqueó la ventana emergente de Google. Por favor, usa la opción de Correo/Contraseña abajo o permite las ventanas emergentes.');
+        setErrorMessage('El navegador bloqueó la ventana emergente de Google. Por favor, permite las ventanas emergentes en tu navegador o usa el Ingreso Rápido Local abajo.');
       } else {
         setErrorMessage(`Error de Google Auth: ${error.message || 'Inténtalo de nuevo.'}`);
       }
@@ -51,69 +47,30 @@ export function Welcome() {
     }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
+  const handleLocalAccess = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      setErrorMessage('Por favor, ingresa tu correo y contraseña.');
-      return;
-    }
-    if (authMode === 'email-register' && !name) {
-      setErrorMessage('Por favor, ingresa tu nombre completo.');
+    const cleanName = customName.trim();
+    if (!cleanName) {
+      setErrorMessage('Por favor, ingresa tu Nombre o Código de Colaborador.');
       return;
     }
 
-    try {
-      setErrorMessage('');
-      setLoading(true);
-
-      if (authMode === 'email-register') {
-        const result = await createUserWithEmailAndPassword(auth, email, password);
-        const role: 'user' | 'admin' = email.includes('admin') ? 'admin' : 'user';
-        const userDoc = {
-          id: result.user.uid,
-          name: name,
-          email: email,
-          role: role,
-          department: 'General'
-        };
-        await setDoc(doc(db, 'users', result.user.uid), userDoc);
-        setCurrentUser(userDoc);
-        enterApp();
-      } else {
-        const result = await signInWithEmailAndPassword(auth, email, password);
-        // El perfil será cargado automáticamente por la suscripción en App.tsx
-        enterApp();
-      }
-    } catch (error: any) {
-      console.error("Error with Email Auth:", error);
-      let friendlyMessage = 'Ocurrió un error al autenticar. Por favor verifica tus credenciales.';
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        friendlyMessage = 'Correo o contraseña incorrectos. Verifica tus datos.';
-      } else if (error.code === 'auth/email-already-in-use') {
-        friendlyMessage = 'Este correo ya se encuentra registrado. Intenta iniciar sesión.';
-      } else if (error.code === 'auth/weak-password') {
-        friendlyMessage = 'La contraseña debe tener al menos 6 caracteres.';
-      } else if (error.code === 'auth/invalid-email') {
-        friendlyMessage = 'El correo ingresado no es válido.';
-      }
-      setErrorMessage(friendlyMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Demo bypass to ensure they are NEVER locked out during preview/testing
-  const handleQuickBypass = () => {
-    const role: 'user' | 'admin' = email.includes('admin') ? 'admin' : 'user';
+    setLoading(true);
+    const role: 'user' | 'admin' = selectedRole;
     const demoUser = {
-      id: 'demo-user-id',
-      name: name || 'Usuario Demo',
-      email: email || 'demo@usuario.com',
+      id: 'local_' + cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+      name: cleanName,
+      email: 'local@empresa.com',
       role: role,
       department: 'General'
     };
+    
+    // Sign out from any active firebase session to avoid conflicts
+    auth.signOut().catch(() => {});
+    
     setCurrentUser(demoUser);
     enterApp();
+    setLoading(false);
   };
 
   return (
@@ -141,145 +98,94 @@ export function Welcome() {
 
           {/* Error Message Display */}
           {errorMessage && (
-            <div className="mb-6 p-4 bg-red-500/15 border border-red-500/30 rounded-xl flex items-start space-x-3 text-red-200 text-sm">
+            <div className="mb-6 p-4 bg-red-500/15 border border-red-500/30 rounded-xl flex items-start space-x-3 text-red-200 text-sm animate-fade-in">
               <AlertCircle className="w-5 h-5 shrink-0 text-red-400 mt-0.5" />
               <span>{errorMessage}</span>
             </div>
           )}
 
-          {/* Authentication Method Tabs */}
-          <div className="grid grid-cols-2 bg-slate-950 p-1 rounded-xl mb-6">
+          {/* Option 1: Live Cloud Connection with Google */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase text-slate-400 tracking-wider mb-2 flex items-center">
+              <Key className="w-3.5 h-3.5 mr-1 text-blue-400" />
+              Opción 1: Acceso Seguro con Cuenta Google
+            </h3>
             <button
-              onClick={() => {
-                setAuthMode('email-login');
-                setErrorMessage('');
-              }}
-              className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-                authMode === 'email-login' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
-              }`}
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="w-full py-3.5 px-6 bg-slate-950 hover:bg-slate-900 border border-slate-700 text-white font-medium rounded-xl transition-all duration-200 shadow-sm flex items-center justify-center space-x-3 disabled:opacity-70 group"
             >
-              Iniciar Sesión
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5 group-hover:scale-105 transition-transform" />
+              <span className="font-semibold text-sm">Ingresar con Google</span>
             </button>
-            <button
-              onClick={() => {
-                setAuthMode('email-register');
-                setErrorMessage('');
-              }}
-              className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-                authMode === 'email-register' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Registrarse
-            </button>
+            <p className="text-[10px] text-slate-500 text-center">
+              Sincroniza tus datos de rendiciones en vivo de forma segura en la nube.
+            </p>
           </div>
 
-          {/* Main Auth Forms */}
-          <form onSubmit={handleEmailAuth} className="space-y-4">
-            {authMode === 'email-register' && (
-              <div>
-                <label className="block text-xs font-medium text-slate-400 uppercase mb-1.5">Nombre Completo</label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500">
-                    <User className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Juan Pérez"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-                  />
-                </div>
-              </div>
-            )}
+          {/* Division partition */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-700/60"></div>
+            </div>
+            <div className="relative flex justify-center text-[10px] uppercase">
+              <span className="bg-slate-800 px-3 text-slate-500 font-semibold tracking-wider">O también</span>
+            </div>
+          </div>
 
+          {/* Option 2: Quick Local Entry without account */}
+          <form onSubmit={handleLocalAccess} className="space-y-4">
+            <h3 className="text-xs font-semibold uppercase text-slate-400 tracking-wider mb-2 flex items-center">
+              <User className="w-3.5 h-3.5 mr-1 text-emerald-400" />
+              Opción 2: Ingreso Rápido Local
+            </h3>
+            
             <div>
-              <label className="block text-xs font-medium text-slate-400 uppercase mb-1.5">Correo Electrónico</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500">
-                  <Mail className="w-4 h-4" />
+                  <User className="w-4 h-4" />
                 </span>
                 <input
-                  type="email"
+                  type="text"
                   required
-                  placeholder="usuario@empresa.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Tu Nombre o Código de Colaborador"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                 />
               </div>
-              {authMode === 'email-register' && (
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Tip: Si tu correo contiene &quot;admin&quot;, se te asignará rol de administrador de forma automática.
-                </p>
-              )}
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-400 uppercase mb-1.5">Contraseña</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500">
-                  <Lock className="w-4 h-4" />
+                  <Briefcase className="w-4 h-4" />
                 </span>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-                />
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value as 'user' | 'admin')}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 pl-11 pr-4 text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all appearance-none cursor-pointer"
+                >
+                  <option value="user" className="bg-slate-900 text-white">Colaborador (Mis Rendiciones)</option>
+                  <option value="admin" className="bg-slate-900 text-white">Administrador (Panel de Control)</option>
+                </select>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-3.5 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors duration-200 shadow-md flex items-center justify-center space-x-2 disabled:opacity-70"
+              className="w-full py-3.5 px-6 bg-slate-750 hover:bg-slate-700 border border-slate-600 text-slate-200 font-semibold rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-70 shadow-sm"
             >
-              <span>
-                {loading 
-                  ? 'Procesando...' 
-                  : (authMode === 'email-register' ? 'Crear Cuenta' : 'Iniciar Sesión con Correo')}
-              </span>
+              <span>Ingresar en Modo Local</span>
             </button>
           </form>
 
-          {/* Social login partition */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-700"></div>
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-slate-800 px-3 text-slate-400">O también</span>
-            </div>
-          </div>
-
-          {/* Google Login button */}
-          <button
-            onClick={handleGoogleLogin}
-            disabled={loading}
-            className="w-full py-3 px-6 bg-slate-950 hover:bg-slate-900 border border-slate-700 text-white font-medium rounded-xl transition-all duration-200 shadow-sm flex items-center justify-center space-x-3 disabled:opacity-70"
-          >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-            <span>Ingresar con Google</span>
-          </button>
-
-          {/* Safe bypass warning option */}
-          <div className="mt-6 pt-4 border-t border-slate-700/50 flex flex-col items-center">
-            <button
-              onClick={handleQuickBypass}
-              className="text-xs text-blue-400 hover:text-blue-300 transition-colors underline bg-transparent border-0 cursor-pointer"
-            >
-              ¿Problemas con el servidor? Ingreso Rápido Local
-            </button>
-          </div>
         </div>
       </div>
       
       <div className="mt-8 text-slate-500 text-xs text-center">
-        &copy; {new Date().getFullYear()} {settings.companyName}. Acceso multiplataforma en la nube.
+        &copy; {new Date().getFullYear()} {settings.companyName}. Acceso simplificado sin contraseñas.
       </div>
     </div>
   );

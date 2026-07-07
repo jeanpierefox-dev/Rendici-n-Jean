@@ -72,18 +72,44 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <div className="p-4 border-t border-slate-800 bg-slate-950/30">
         <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <UserCircle className="w-8 h-8 text-slate-400" />
+          <div className="flex items-center min-w-0">
+            <UserCircle className="w-8 h-8 text-slate-400 shrink-0" />
             <div className="ml-3 overflow-hidden">
               <p className="text-sm font-medium text-white truncate">{currentUser.name}</p>
               <p className="text-xs text-slate-400 capitalize">{currentUser.role}</p>
             </div>
           </div>
+          
+          <button
+            onClick={async () => {
+              const newRole = currentUser.role === 'admin' ? 'user' : 'admin';
+              
+              // 1. Update global store state instantly
+              useAppStore.setState({
+                currentUser: { ...currentUser, role: newRole }
+              });
+
+              // 2. Persist to Firestore if we are connected with Google
+              if (auth.currentUser) {
+                try {
+                  const { doc, setDoc } = await import('firebase/firestore');
+                  const { db } = await import('../lib/firebase');
+                  await setDoc(doc(db, 'users', auth.currentUser.uid), { role: newRole }, { merge: true });
+                } catch (e) {
+                  console.error("No se pudo actualizar el rol en Firestore:", e);
+                }
+              }
+            }}
+            className="text-[10px] bg-slate-800 hover:bg-slate-700 hover:text-white text-blue-400 font-medium px-2 py-1 rounded border border-slate-700 transition-colors"
+            title="Cambiar entre Administrador y Colaborador"
+          >
+            Cambiar Rol
+          </button>
         </div>
         
         <button 
           onClick={() => {
-            auth.signOut();
+            auth.signOut().catch(() => {});
             useAppStore.setState({ hasEnteredApp: false });
           }}
           className="mt-4 flex items-center justify-center w-full px-3 py-2 text-xs font-medium text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
