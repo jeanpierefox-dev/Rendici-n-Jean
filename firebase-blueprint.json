@@ -1,0 +1,77 @@
+{
+  "projectInfo": {
+    "name": "Jean-Barsa Rendiciones",
+    "description": "Sistema de gestión y aprobación de rendiciones de gastos y viáticos."
+  },
+  "collections": [
+    {
+      "name": "users",
+      "description": "Stores user profiles.",
+      "securityRules": {
+        "read": "request.auth != null",
+        "create": "request.auth != null",
+        "update": "request.auth != null && request.auth.uid == resource.id",
+        "delete": "false"
+      },
+      "fields": [
+        { "name": "id", "type": "string", "description": "User ID matching Firebase Auth UID" },
+        { "name": "name", "type": "string", "description": "Full name" },
+        { "name": "email", "type": "string", "description": "Email address" },
+        { "name": "role", "type": "string", "description": "User role: admin or user" },
+        { "name": "department", "type": "string", "description": "User department" }
+      ]
+    },
+    {
+      "name": "rendiciones",
+      "description": "Stores expense report blocks.",
+      "securityRules": {
+        "read": "request.auth != null && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')",
+        "create": "request.auth != null && request.resource.data.userId == request.auth.uid",
+        "update": "request.auth != null && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')",
+        "delete": "request.auth != null && resource.data.userId == request.auth.uid"
+      },
+      "fields": [
+        { "name": "name", "type": "string", "description": "Name of the expense block" },
+        { "name": "status", "type": "string", "description": "Pendiente, Aprobado, Rechazado" },
+        { "name": "createdAt", "type": "timestamp", "description": "Creation timestamp" },
+        { "name": "userId", "type": "string", "description": "ID of the user who created it" },
+        { "name": "userName", "type": "string", "description": "Name of the user who created it" },
+        { "name": "totalAmount", "type": "number", "description": "Total amount spent" },
+        { "name": "advanceAmount", "type": "number", "description": "Amount given in advance" },
+        { "name": "signature", "type": "string", "description": "Base64 signature" },
+        { "name": "comprobantes", "type": "array", "description": "Array of Comprobante objects" }
+      ]
+    },
+    {
+      "name": "settings",
+      "description": "Global application settings.",
+      "securityRules": {
+        "read": "request.auth != null",
+        "create": "false",
+        "update": "request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'",
+        "delete": "false"
+      },
+      "fields": [
+        { "name": "companyName", "type": "string", "description": "Company name" },
+        { "name": "companyLogo", "type": "string", "description": "Base64 company logo" }
+      ]
+    },
+    {
+      "name": "notifications",
+      "description": "Stores user notifications.",
+      "securityRules": {
+        "read": "request.auth != null && resource.data.userId == request.auth.uid",
+        "create": "request.auth != null",
+        "update": "request.auth != null && resource.data.userId == request.auth.uid",
+        "delete": "request.auth != null && resource.data.userId == request.auth.uid"
+      },
+      "fields": [
+        { "name": "userId", "type": "string", "description": "Target user ID" },
+        { "name": "title", "type": "string", "description": "Notification title" },
+        { "name": "message", "type": "string", "description": "Notification message" },
+        { "name": "createdAt", "type": "timestamp", "description": "Creation timestamp" },
+        { "name": "read", "type": "boolean", "description": "Read status" }
+      ]
+    }
+  ]
+}

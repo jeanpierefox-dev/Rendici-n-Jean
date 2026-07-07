@@ -84,22 +84,24 @@ export function FormRendicion() {
     if (!name || comprobantes.length === 0 || !advanceAmount) return;
     setLoading(true);
     
-    if (isEditing && id) {
-      updateRendicion(id, {
-        name,
-        advanceAmount: parseFloat(advanceAmount) || 0,
-        comprobantes: comprobantes as Comprobante[],
-        signature
-      });
-    } else {
-      addRendicion(name, parseFloat(advanceAmount) || 0, comprobantes, signature);
-    }
-
-    setTimeout(() => {
+    try {
+      if (isEditing && id) {
+        await updateRendicion(id, {
+          name,
+          advanceAmount: parseFloat(advanceAmount) || 0,
+          comprobantes: comprobantes as Comprobante[],
+          signature
+        });
+      } else {
+        await addRendicion(name, parseFloat(advanceAmount) || 0, comprobantes, signature);
+      }
       setLoading(false);
       setSuccess(true);
       setTimeout(() => navigate('/'), 1500);
-    }, 600);
+    } catch (error) {
+      console.error(error);
+      setLoading(false);
+    }
   };
 
   if (success) {
@@ -164,18 +166,18 @@ export function FormRendicion() {
       </div>
 
       <div className="bg-white border border-gray-200 shadow-sm rounded-xl overflow-hidden">
-        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+        <div className="p-4 md:p-6 border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gray-50">
           <h3 className="font-semibold text-gray-800 flex items-center">
             <FileText className="w-5 h-5 mr-2 text-gray-500" /> 
             Documentos Añadidos ({comprobantes.length})
           </h3>
-          <div className="flex gap-4 items-center">
-            <div className="text-sm font-bold text-gray-900 bg-white px-3 py-1.5 rounded-md border border-gray-200">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 items-stretch sm:items-center w-full sm:w-auto">
+            <div className="text-sm font-bold text-gray-900 bg-white px-3 py-1.5 rounded-md border border-gray-200 text-center">
               Total Gastado: S/ {totalAmount.toFixed(2)}
             </div>
             {advanceVal > 0 && (
-              <div className={`text-xs font-bold px-3 py-1.5 rounded-md border ${balanceClass}`}>
-                Saldo: S/ {Math.abs(balance).toFixed(2)} <br className="hidden md:block" /><span className="font-normal">({balanceText})</span>
+              <div className={`text-xs font-bold px-3 py-1.5 rounded-md border text-center ${balanceClass}`}>
+                Saldo: S/ {Math.abs(balance).toFixed(2)} <span className="font-normal">({balanceText})</span>
               </div>
             )}
           </div>
@@ -305,18 +307,18 @@ export function FormRendicion() {
         </div>
       </div>
       
-      <div className="flex justify-end gap-3 pt-4">
+      <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 w-full">
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          className="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors order-2 sm:order-1 text-center"
         >
           Cancelar
         </button>
         <button
           onClick={handleSubmitBlock}
           disabled={loading || !name || comprobantes.length === 0}
-          className="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+          className="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm order-1 sm:order-2 text-center"
         >
           {loading ? 'Guardando...' : (isEditing ? 'Guardar Cambios' : 'Enviar Bloque de Rendición')}
         </button>

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Rendicion, AppSettings, AppNotification, User, Comprobante } from '../types';
+import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db } from './firebase';
 
 // Initial Mock Data
 const MOCK_USERS: User[] = [
@@ -20,14 +22,15 @@ interface AppState {
   currentUser: User;
   
   enterApp: () => void;
-  addRendicion: (name: string, advanceAmount: number, comprobantes: Omit<Comprobante, 'id'>[], signature?: string) => void;
-  updateRendicion: (id: string, updates: Partial<Rendicion>) => void;
-  updateRendicionStatus: (id: string, newStatus: Rendicion['status']) => void;
-  deleteRendicion: (id: string) => void;
+  addRendicion: (name: string, advanceAmount: number, comprobantes: Omit<Comprobante, 'id'>[], signature?: string) => Promise<void>;
+  updateRendicion: (id: string, updates: Partial<Rendicion>) => Promise<void>;
+  updateRendicionStatus: (id: string, newStatus: Rendicion['status']) => Promise<void>;
+  deleteRendicion: (id: string) => Promise<void>;
   updateSettings: (newSettings: Partial<AppSettings>) => void;
   addNotification: (userId: string, title: string, message: string) => void;
   markNotificationAsRead: (id: string) => void;
   switchUser: (role: 'user' | 'admin') => void;
+  setCurrentUser: (user: User) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -41,11 +44,12 @@ export const useAppStore = create<AppState>()(
 
       enterApp: () => set({ hasEnteredApp: true }),
 
-      addRendicion: (name, advanceAmount, comprobantes, signature) => {
+      addRendicion: async (name, advanceAmount, comprobantes, signature) => {
         const { currentUser } = get();
         const totalAmount = comprobantes.reduce((sum, c) => sum + c.amount, 0);
+        const newId = crypto.randomUUID();
         const newRendicion: Rendicion = {
-          id: crypto.randomUUID(),
+          id: newId,
           name,
           status: 'Pendiente',
           createdAt: new Date().toISOString(),
@@ -57,55 +61,39 @@ export const useAppStore = create<AppState>()(
           signature
         };
         
-        set((state) => ({
-          rendiciones: [newRendicion, ...state.rendiciones]
-        }));
-        
+        await setDoc(doc(db, 'rendiciones', newId), newRendicion);
         get().addNotification('admin1', 'Nueva Rendición', `${currentUser.name} ha enviado el bloque "${name}" por S/ ${totalAmount.toFixed(2)}.`);
       },
 
-      updateRendicion: (id, updates) => {
-        set((state) => {
-          const newRendiciones = state.rendiciones.map(r => {
-            if (r.id === id) {
-              const updatedRendicion = { ...r, ...updates };
-              if (updates.comprobantes) {
-                updatedRendicion.totalAmount = updates.comprobantes.reduce((sum, c) => sum + c.amount, 0);
-              }
-              return updatedRendicion;
-            }
-            return r;
-          });
-          return { rendiciones: newRendiciones };
-        });
+      updateRendicion: async (id, updates) => {
+        const rendicionRef = doc(db, 'rendiciones', id);
+        
+        const updateData: any = { ...updates };
+        if (updates.comprobantes) {
+          updateData.totalAmount = updates.comprobantes.reduce((sum, c) => sum + c.amount, 0);
+        }
+        
+        await updateDoc(rendicionRef, updateData);
       },
 
-      updateRendicionStatus: (id, newStatus) => {
-        set((state) => {
-          const { settings } = get();
-          const newRendiciones = state.rendiciones.map(r => {
-            if (r.id === id) {
-              get().addNotification(r.userId, 'Estado Actualizado', `Tu rendición "${r.name}" de S/ ${r.totalAmount.toFixed(2)} ha sido ${newStatus.toLowerCase()}.`);
-              
-              if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification('Jean-Barsa Rendiciones', {
-                  body: `Tu rendición ha sido ${newStatus.toLowerCase()}.`,
-                  icon: settings.companyLogo
-                });
-              }
-
-              return { ...r, status: newStatus };
-            }
-            return r;
-          });
-          return { rendiciones: newRendiciones };
-        });
+      updateRendicionStatus: async (id, newStatus) => {
+        const { settings, rendiciones } = get();
+        const r = rendiciones.find(r => r.id === id);
+        if (r) {
+          await updateDoc(doc(db, 'rendiciones', id), { status: newStatus });
+          get().addNotification(r.userId, 'Estado Actualizado', `Tu rendición "${r.name}" de S/ ${r.totalAmount.toFixed(2)} ha sido ${newStatus.toLowerCase()}.`);
+          
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Jean-Barsa Rendiciones', {
+              body: `Tu rendición ha sido ${newStatus.toLowerCase()}.`,
+              icon: settings.companyLogo
+            });
+          }
+        }
       },
 
-      deleteRendicion: (id) => {
-        set((state) => ({
-          rendiciones: state.rendiciones.filter(r => r.id !== id)
-        }));
+      deleteRendicion: async (id) => {
+        await deleteDoc(doc(db, 'rendiciones', id));
       },
 
       updateSettings: (newSettings) => {
@@ -142,6 +130,9 @@ export const useAppStore = create<AppState>()(
           set({ currentUser: user });
         }
       },
+      setCurrentUser: (user) => {
+        set({ currentUser: user });
+      }
     }),
     {
       name: 'jean-barsa-storage',

@@ -181,61 +181,63 @@ export function DashboardAdmin() {
                   
                   {expandedRow === rendicion.id && (
                     <tr className="bg-gray-50/50">
-                      <td colSpan={8} className="px-8 py-4 border-b border-gray-200">
-                        <div className="pl-8 border-l-2 border-blue-200">
+                      <td colSpan={8} className="px-3 md:px-8 py-4 border-b border-gray-200">
+                        <div className="pl-3 md:pl-8 border-l-2 border-blue-200">
                           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Detalle de Comprobantes</h4>
-                          <table className="w-full text-left text-sm">
-                            <thead>
-                              <tr className="text-gray-500 border-b border-gray-200">
-                                <th className="pb-2 font-medium">Fecha</th>
-                                <th className="pb-2 font-medium">Tipo y N°</th>
-                                <th className="pb-2 font-medium">RUC</th>
-                                <th className="pb-2 font-medium">Monto</th>
-                                <th className="pb-2 font-medium text-right">Comprobante</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {rendicion.comprobantes.map((c, i) => (
-                                <tr key={i}>
-                                  <td className="py-2 text-gray-600">{format(new Date(c.date), 'dd/MM/yyyy')}</td>
-                                  <td className="py-2 text-gray-900 font-medium">{c.type} {c.documentNumber}</td>
-                                  <td className="py-2 text-gray-600">{c.ruc}</td>
-                                  <td className="py-2 text-gray-900 font-medium">S/ {c.amount.toFixed(2)}</td>
-                                  <td className="py-2 text-right">
-                                    {c.receiptPhoto ? (
-                                      <button 
-                                        onClick={() => setSelectedImage(c.receiptPhoto!)}
-                                        className="inline-flex items-center text-blue-600 hover:text-blue-800 text-xs font-medium"
-                                      >
-                                        <Eye className="w-3 h-3 mr-1" /> Ver
-                                      </button>
-                                    ) : (
-                                      <span className="text-gray-400 text-xs italic">-</span>
-                                    )}
-                                  </td>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm min-w-[500px]">
+                              <thead>
+                                <tr className="text-gray-500 border-b border-gray-200">
+                                  <th className="pb-2 font-medium">Fecha</th>
+                                  <th className="pb-2 font-medium">Tipo y N°</th>
+                                  <th className="pb-2 font-medium">RUC</th>
+                                  <th className="pb-2 font-medium">Monto</th>
+                                  <th className="pb-2 font-medium text-right">Comprobante</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                            {(rendicion.advanceAmount || 0) > 0 && (
-                              <tfoot className="bg-gray-100">
-                                <tr>
-                                  <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">Monto Entregado (Adelanto):</td>
-                                  <td className="py-2 font-bold text-gray-900">S/ {rendicion.advanceAmount.toFixed(2)}</td>
-                                  <td></td>
-                                </tr>
-                                <tr>
-                                  <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">Total Gastado:</td>
-                                  <td className="py-2 font-bold text-gray-900">S/ {rendicion.totalAmount.toFixed(2)}</td>
-                                  <td></td>
-                                </tr>
-                                <tr>
-                                  <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">Saldo ({rendicion.advanceAmount - rendicion.totalAmount > 0 ? 'A Devolver' : 'A Reembolsar'}):</td>
-                                  <td className="py-2 font-bold text-gray-900">S/ {Math.abs(rendicion.advanceAmount - rendicion.totalAmount).toFixed(2)}</td>
-                                  <td></td>
-                                </tr>
-                              </tfoot>
-                            )}
-                          </table>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {rendicion.comprobantes.map((c, i) => (
+                                  <tr key={i}>
+                                    <td className="py-2 text-gray-600">{format(new Date(c.date), 'dd/MM/yyyy')}</td>
+                                    <td className="py-2 text-gray-900 font-medium">{c.type} {c.documentNumber}</td>
+                                    <td className="py-2 text-gray-600">{c.ruc}</td>
+                                    <td className="py-2 text-gray-900 font-medium">S/ {c.amount.toFixed(2)}</td>
+                                    <td className="py-2 text-right">
+                                      {c.receiptPhoto ? (
+                                        <button 
+                                          onClick={() => setSelectedImage(c.receiptPhoto!)}
+                                          className="inline-flex items-center text-blue-600 hover:text-blue-800 text-xs font-medium"
+                                        >
+                                          <Eye className="w-3 h-3 mr-1" /> Ver
+                                        </button>
+                                      ) : (
+                                        <span className="text-gray-400 text-xs italic">-</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              {(rendicion.advanceAmount || 0) > 0 && (
+                                <tfoot className="bg-gray-100">
+                                  <tr>
+                                    <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">Monto Entregado (Adelanto):</td>
+                                    <td className="py-2 font-bold text-gray-900">S/ {rendicion.advanceAmount.toFixed(2)}</td>
+                                    <td></td>
+                                  </tr>
+                                  <tr>
+                                    <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">Total Gastado:</td>
+                                    <td className="py-2 font-bold text-gray-900">S/ {rendicion.totalAmount.toFixed(2)}</td>
+                                    <td></td>
+                                  </tr>
+                                  <tr>
+                                    <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">Saldo ({rendicion.advanceAmount - rendicion.totalAmount > 0 ? 'A Devolver' : 'A Reembolsar'}):</td>
+                                    <td className="py-2 font-bold text-gray-900">S/ {Math.abs(rendicion.advanceAmount - rendicion.totalAmount).toFixed(2)}</td>
+                                    <td></td>
+                                  </tr>
+                                </tfoot>
+                              )}
+                            </table>
+                          </div>
                           {rendicion.signature && (
                             <div className="mt-4 pt-4 border-t border-gray-200">
                               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Firma del Solicitante</h4>

@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppStore } from '../lib/store';
+import { auth } from '../lib/firebase';
 import { NotificationBell } from './NotificationBell';
-import { LayoutDashboard, FileText, Settings, LogOut, UserCircle } from 'lucide-react';
+import { LayoutDashboard, FileText, Settings, LogOut, UserCircle, Menu, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link, useLocation } from 'react-router';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { settings, currentUser, switchUser } = useAppStore();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
 
   const handlePushPermission = () => {
@@ -25,66 +27,128 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { label: 'Nueva Rendición', icon: FileText, path: '/new' },
       ];
 
+  const renderSidebarContent = (onLinkClick?: () => void) => (
+    <>
+      <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800 bg-slate-950/50">
+        {settings.companyLogo ? (
+          <img src={settings.companyLogo} alt="Logo" className="h-8 max-w-[150px] object-contain brightness-0 invert" />
+        ) : (
+          <span className="font-bold text-lg text-white truncate">
+            {settings.companyName}
+          </span>
+        )}
+        {onLinkClick && (
+          <button 
+            onClick={onLinkClick} 
+            className="md:hidden p-1 rounded-md text-slate-400 hover:text-white focus:outline-none"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
+      
+      <nav className="flex-1 px-4 py-6 space-y-1">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = location.pathname === item.path || (item.path === '/admin' && location.pathname.startsWith('/admin'));
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              onClick={onLinkClick}
+              className={cn(
+                "flex items-center px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                isActive 
+                  ? "bg-slate-800 text-white" 
+                  : "text-slate-400 hover:bg-slate-800 hover:text-white"
+              )}
+            >
+              <Icon className="mr-3 h-5 w-5" />
+              {item.label}
+            </Link>
+          )
+        })}
+      </nav>
+
+      <div className="p-4 border-t border-slate-800 bg-slate-950/30">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <UserCircle className="w-8 h-8 text-slate-400" />
+            <div className="ml-3 overflow-hidden">
+              <p className="text-sm font-medium text-white truncate">{currentUser.name}</p>
+              <p className="text-xs text-slate-400 capitalize">{currentUser.role}</p>
+            </div>
+          </div>
+        </div>
+        
+        <button 
+          onClick={() => {
+            auth.signOut();
+            useAppStore.setState({ hasEnteredApp: false });
+          }}
+          className="mt-4 flex items-center justify-center w-full px-3 py-2 text-xs font-medium text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
+        >
+          Cerrar Sesión
+        </button>
+      </div>
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-50 flex font-sans">
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col text-slate-300">
-        <div className="h-16 flex items-center px-6 border-b border-slate-800 bg-slate-950/50">
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
+      {/* Mobile Top Bar */}
+      <header className="md:hidden flex h-16 bg-slate-900 border-b border-slate-800 items-center justify-between px-4 text-white shrink-0 sticky top-0 z-30">
+        <div className="flex items-center space-x-2">
+          <button 
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="p-2 -ml-2 text-slate-400 hover:text-white focus:outline-none"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
           {settings.companyLogo ? (
-            <img src={settings.companyLogo} alt="Logo" className="h-8 max-w-[150px] object-contain brightness-0 invert" />
+            <img src={settings.companyLogo} alt="Logo" className="h-6 max-w-[120px] object-contain brightness-0 invert" />
           ) : (
-            <span className="font-bold text-lg text-white truncate">
+            <span className="font-bold text-base text-white truncate max-w-[150px]">
               {settings.companyName}
             </span>
           )}
         </div>
-        
-        <nav className="flex-1 px-4 py-6 space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path || (item.path === '/admin' && location.pathname.startsWith('/admin'));
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "flex items-center px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
-                  isActive 
-                    ? "bg-slate-800 text-white" 
-                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                )}
-              >
-                <Icon className="mr-3 h-5 w-5" />
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-slate-800 bg-slate-950/30">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <UserCircle className="w-8 h-8 text-slate-400" />
-              <div className="ml-3">
-                <p className="text-sm font-medium text-white">{currentUser.name}</p>
-                <p className="text-xs text-slate-400 capitalize">{currentUser.role}</p>
-              </div>
-            </div>
-          </div>
-          
+        <div className="flex items-center space-x-2">
           <button 
-            onClick={() => switchUser(currentUser.role === 'admin' ? 'user' : 'admin')}
-            className="mt-4 flex items-center justify-center w-full px-3 py-2 text-xs font-medium text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
+            onClick={handlePushPermission}
+            className="text-[10px] text-blue-400 hover:underline border border-slate-700 rounded px-1.5 py-0.5 bg-slate-800"
           >
-            Cambiar a vista {currentUser.role === 'admin' ? 'Usuario' : 'Administrador'}
+            Push
           </button>
+          <NotificationBell />
         </div>
+      </header>
+
+      {/* Sidebar Mobile Drawer Backdrop */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Mobile Drawer */}
+      <aside className={cn(
+        "fixed inset-y-0 left-0 w-64 bg-slate-900 border-r border-slate-800 flex flex-col text-slate-300 z-50 md:hidden transition-transform duration-300 ease-in-out",
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        {renderSidebarContent(() => setIsMobileMenuOpen(false))}
+      </aside>
+
+      {/* Sidebar Desktop (always visible on md+) */}
+      <aside className="hidden md:flex w-64 bg-slate-900 border-r border-slate-800 flex-col text-slate-300 shrink-0">
+        {renderSidebarContent()}
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 z-10">
+        {/* Header Desktop only */}
+        <header className="hidden md:flex h-16 bg-white border-b border-gray-200 items-center justify-between px-8 shrink-0">
           <h1 className="text-xl font-semibold text-gray-800">
             {navItems.find(i => location.pathname === i.path)?.label || 'Rendiciones'}
           </h1>
@@ -100,7 +164,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-4 md:p-8">
           <div className="max-w-6xl mx-auto">
             {children}
           </div>

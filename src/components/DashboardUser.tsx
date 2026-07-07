@@ -31,21 +31,21 @@ export function DashboardUser() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Mis Rendiciones (Bloques)</h2>
           <p className="text-sm text-gray-500 mt-1">Gestiona y revisa el estado de tus bloques de gastos reportados.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 w-full sm:w-auto">
           <button 
             onClick={() => exportToPDF(myRendiciones, settings)}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex-1 sm:flex-none text-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Exportar PDF
           </button>
           <Link 
             to="/new" 
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
           >
             <PlusCircle className="w-4 h-4 mr-2" />
             Nuevo Bloque
