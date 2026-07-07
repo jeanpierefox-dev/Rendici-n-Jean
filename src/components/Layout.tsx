@@ -110,7 +110,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <button 
           onClick={() => {
             auth.signOut().catch(() => {});
-            useAppStore.setState({ hasEnteredApp: false });
+            useAppStore.setState({ hasEnteredApp: false, currentUser: null });
           }}
           className="mt-4 flex items-center justify-center w-full px-3 py-2 text-xs font-medium text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
         >

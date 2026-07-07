@@ -62,13 +62,17 @@ export default function App() {
         useAppStore.setState({ hasEnteredApp: true });
       });
     } else {
-      useAppStore.setState({ hasEnteredApp: false });
+      // If there's no active Google user session, but we have a custom user logged in (with id prefix user_ or local_),
+      // we keep the app active and do not reset hasEnteredApp.
+      if (!currentUser || (currentUser.id && !currentUser.id.startsWith('user_') && !currentUser.id.startsWith('local_'))) {
+        useAppStore.setState({ hasEnteredApp: false });
+      }
     }
-  }, [user]);
+  }, [user, currentUser]);
 
   // 2. Effect to subscribe to rendiciones safely
   useEffect(() => {
-    if (!user || !currentUser || currentUser.id !== user.uid) return;
+    if (!currentUser) return;
 
     let q;
     if (currentUser.role === 'admin') {
@@ -77,7 +81,7 @@ export default function App() {
     } else {
       // Normal user can only view their own rendiciones (required by Firestore Rules)
       // We query without ordering to avoid needing a composite index in Firestore
-      q = query(collection(db, 'rendiciones'), where('userId', '==', user.uid));
+      q = query(collection(db, 'rendiciones'), where('userId', '==', currentUser.id));
     }
 
     const unsubscribe = onSnapshot(
@@ -105,13 +109,13 @@ export default function App() {
     );
 
     return () => unsubscribe();
-  }, [user, currentUser?.id, currentUser?.role]);
+  }, [currentUser?.id, currentUser?.role]);
 
   if (loading) {
     return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Cargando...</div>;
   }
 
-  if (!hasEnteredApp || !user) {
+  if (!hasEnteredApp || !currentUser) {
     return <Welcome />;
   }
 
