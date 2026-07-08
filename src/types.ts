@@ -21,6 +21,7 @@ export interface Rendicion {
   comprobantes: Comprobante[];
   totalAmount: number;
   advanceAmount: number;
+  advanceDate?: string; // YYYY-MM-DD or ISO string
   signature?: string; // base64
 }
 

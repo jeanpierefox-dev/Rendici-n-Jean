@@ -17,6 +17,7 @@ export function FormRendicion() {
 
   const [name, setName] = useState('');
   const [advanceAmount, setAdvanceAmount] = useState('');
+  const [advanceDate, setAdvanceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [comprobantes, setComprobantes] = useState<Omit<Comprobante, 'id'>[]>([]);
   const [signature, setSignature] = useState<string | undefined>();
   const [isLoaded, setIsLoaded] = useState(false);
@@ -28,6 +29,9 @@ export function FormRendicion() {
       if (existing) {
         setName(existing.name);
         setAdvanceAmount(existing.advanceAmount.toString());
+        if (existing.advanceDate) {
+          setAdvanceDate(existing.advanceDate);
+        }
         setComprobantes(existing.comprobantes);
         setSignature(existing.signature);
         setShowDocForm(existing.comprobantes.length === 0);
@@ -36,7 +40,7 @@ export function FormRendicion() {
     }
   }, [id, isEditing, rendiciones, isLoaded]);
   
-  // Current Form state
+  // Current Form state for adding a document
   const [type, setType] = useState<DocType>('Factura');
   const [documentNumber, setDocumentNumber] = useState('');
   const [ruc, setRuc] = useState('');
@@ -61,18 +65,17 @@ export function FormRendicion() {
   };
 
   const autoSaveBlock = async (
-    updatedName: string,
-    updatedAdvance: string,
-    updatedComprobantes: any[],
+    updatedComprobantes?: any[],
     updatedSignature?: string
   ) => {
     if (!id || !isEditing) return;
     setSaveStatus('saving');
     try {
       await updateRendicion(id, {
-        name: updatedName.trim() || 'Sin Nombre',
-        advanceAmount: parseFloat(updatedAdvance) || 0,
-        comprobantes: updatedComprobantes as Comprobante[],
+        name: name.trim() || 'Sin Nombre',
+        advanceAmount: parseFloat(advanceAmount) || 0,
+        advanceDate: advanceDate,
+        comprobantes: (updatedComprobantes !== undefined ? updatedComprobantes : comprobantes) as Comprobante[],
         signature: updatedSignature !== undefined ? updatedSignature : signature
       });
       setSaveStatus('saved');
@@ -85,7 +88,7 @@ export function FormRendicion() {
 
   const handleFieldBlur = () => {
     if (isEditing && id) {
-      autoSaveBlock(name, advanceAmount, comprobantes, signature);
+      autoSaveBlock();
     }
   };
 
@@ -115,7 +118,7 @@ export function FormRendicion() {
 
     if (isEditing && id) {
       // Save changes automatically in Firestore
-      await autoSaveBlock(name, advanceAmount, updatedComprobantes, signature);
+      await autoSaveBlock(updatedComprobantes);
     } else {
       // Transition from /new to /edit/:id seamlessly
       setSaveStatus('saving');
@@ -137,6 +140,7 @@ export function FormRendicion() {
           comprobantes: updatedComprobantes as Comprobante[],
           totalAmount,
           advanceAmount: blockAdvance,
+          advanceDate,
           signature
         };
         
@@ -159,12 +163,12 @@ export function FormRendicion() {
     setComprobantes(updatedComprobantes);
     
     if (isEditing && id) {
-      await autoSaveBlock(name, advanceAmount, updatedComprobantes, signature);
+      await autoSaveBlock(updatedComprobantes);
     }
   };
 
   const handleSubmitBlock = async () => {
-    if (!name || comprobantes.length === 0 || !advanceAmount) return;
+    if (!name) return;
     setLoading(true);
     
     try {
@@ -172,12 +176,13 @@ export function FormRendicion() {
         await updateRendicion(id, {
           name,
           advanceAmount: parseFloat(advanceAmount) || 0,
+          advanceDate,
           comprobantes: comprobantes as Comprobante[],
           signature,
           status: 'Pendiente' // Enviar/guardar final siempre restablece el bloque a pendiente para que administración lo revise
         });
       } else {
-        await addRendicion(name, parseFloat(advanceAmount) || 0, comprobantes, signature);
+        await addRendicion(name, parseFloat(advanceAmount) || 0, comprobantes, signature, advanceDate);
       }
       setLoading(false);
       setSuccess(true);
@@ -252,8 +257,8 @@ export function FormRendicion() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white border border-gray-200 shadow-sm rounded-xl p-6">
-        <div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white border border-gray-200 shadow-sm rounded-xl p-6">
+        <div className="md:col-span-1">
           <label className="block text-sm font-medium text-gray-700 mb-2">Nombre del Bloque</label>
           <input 
             type="text" 
@@ -261,6 +266,17 @@ export function FormRendicion() {
             onChange={(e) => setName(e.target.value)}
             onBlur={handleFieldBlur}
             placeholder="Ej. Viaje a Lima - Enero 2024"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Fecha de Desembolso / Entrega</label>
+          <input 
+            type="date" 
+            value={advanceDate}
+            onChange={(e) => setAdvanceDate(e.target.value)}
+            onBlur={handleFieldBlur}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base"
             required
           />
@@ -409,12 +425,12 @@ export function FormRendicion() {
                 const base64 = await fileToBase64(file);
                 setSignature(base64);
                 if (isEditing && id) {
-                  await autoSaveBlock(name, advanceAmount, comprobantes, base64);
+                  await autoSaveBlock(comprobantes, base64);
                 }
               }
             }} 
           />
-          <label htmlFor="signature-upload" className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
+          <label htmlFor="signature-upload" className="cursor-pointer inline-flex inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
             <UploadCloud className="w-4 h-4 mr-2" /> Subir Firma
           </label>
           {signature && (
@@ -436,7 +452,7 @@ export function FormRendicion() {
         </button>
         <button
           onClick={handleSubmitBlock}
-          disabled={loading || !name || comprobantes.length === 0}
+          disabled={loading || !name}
           className="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm order-1 sm:order-2 text-center"
         >
           {loading ? 'Guardando...' : (isEditing ? 'Guardar Cambios' : 'Enviar Bloque de Rendición')}

@@ -85,6 +85,12 @@ export function DashboardUser() {
                     <span>Monto Entregado:</span>
                     <span className="font-medium text-gray-900">S/ {advance.toFixed(2)}</span>
                   </div>
+                  {rendicion.advanceDate && (
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>F. Desembolso:</span>
+                      <span className="font-medium">{format(new Date(rendicion.advanceDate + 'T00:00:00'), 'dd/MM/yyyy')}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span>Documentos:</span>
                     <span className="font-medium text-gray-900">{rendicion.comprobantes.length}</span>

@@ -141,7 +141,10 @@ export function DashboardAdmin() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-gray-900 font-medium">S/ {rendicion.totalAmount.toFixed(2)}</div>
                       {(rendicion.advanceAmount || 0) > 0 && (
-                        <div className="text-gray-500 text-xs mt-0.5">Adelanto: S/ {rendicion.advanceAmount.toFixed(2)}</div>
+                        <div className="text-gray-500 text-xs mt-0.5">
+                          Adelanto: S/ {rendicion.advanceAmount.toFixed(2)}
+                          {rendicion.advanceDate && ` (F. Desembolso: ${format(new Date(rendicion.advanceDate + 'T00:00:00'), 'dd/MM/yyyy')})`}
+                        </div>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-500">
@@ -220,7 +223,10 @@ export function DashboardAdmin() {
                               {(rendicion.advanceAmount || 0) > 0 && (
                                 <tfoot className="bg-gray-100">
                                   <tr>
-                                    <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">Monto Entregado (Adelanto):</td>
+                                    <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">
+                                      Monto Entregado (Adelanto)
+                                      {rendicion.advanceDate && ` [Desembolso: ${format(new Date(rendicion.advanceDate + 'T00:00:00'), 'dd/MM/yyyy')}]`}:
+                                    </td>
                                     <td className="py-2 font-bold text-gray-900">S/ {rendicion.advanceAmount.toFixed(2)}</td>
                                     <td></td>
                                   </tr>

@@ -22,7 +22,7 @@ interface AppState {
   currentUser: User;
   
   enterApp: () => void;
-  addRendicion: (name: string, advanceAmount: number, comprobantes: Omit<Comprobante, 'id'>[], signature?: string) => Promise<void>;
+  addRendicion: (name: string, advanceAmount: number, comprobantes: Omit<Comprobante, 'id'>[], signature?: string, advanceDate?: string) => Promise<void>;
   updateRendicion: (id: string, updates: Partial<Rendicion>) => Promise<void>;
   updateRendicionStatus: (id: string, newStatus: Rendicion['status']) => Promise<void>;
   deleteRendicion: (id: string) => Promise<void>;
@@ -44,7 +44,7 @@ export const useAppStore = create<AppState>()(
 
       enterApp: () => set({ hasEnteredApp: true }),
 
-      addRendicion: async (name, advanceAmount, comprobantes, signature) => {
+      addRendicion: async (name, advanceAmount, comprobantes, signature, advanceDate) => {
         const { currentUser } = get();
         const totalAmount = comprobantes.reduce((sum, c) => sum + c.amount, 0);
         const newId = crypto.randomUUID();
@@ -58,6 +58,7 @@ export const useAppStore = create<AppState>()(
           comprobantes: comprobantes.map(c => ({ ...c, id: crypto.randomUUID() })),
           totalAmount,
           advanceAmount,
+          advanceDate,
           signature
         };
         
