@@ -11,6 +11,13 @@ export interface Comprobante {
   receiptPhoto?: string; // base64
 }
 
+export interface Ingreso {
+  id: string;
+  amount: number;
+  date: string; // YYYY-MM-DD or ISO string
+  reference?: string;
+}
+
 export interface Rendicion {
   id: string;
   name: string;
@@ -23,6 +30,7 @@ export interface Rendicion {
   advanceAmount: number;
   advanceDate?: string; // YYYY-MM-DD or ISO string
   signature?: string; // base64
+  ingresos?: Ingreso[];
 }
 
 export interface AppSettings {

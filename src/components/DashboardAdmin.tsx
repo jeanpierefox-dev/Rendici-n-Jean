@@ -186,6 +186,32 @@ export function DashboardAdmin() {
                     <tr className="bg-gray-50/50">
                       <td colSpan={8} className="px-3 md:px-8 py-4 border-b border-gray-200">
                         <div className="pl-3 md:pl-8 border-l-2 border-blue-200">
+                          {rendicion.ingresos && rendicion.ingresos.length > 0 && (
+                            <div className="mb-6 bg-indigo-50/30 border border-indigo-100/50 rounded-xl p-4 max-w-2xl">
+                              <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider mb-2">Detalle de Ingresos (Desembolsos)</h4>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs">
+                                  <thead>
+                                    <tr className="text-indigo-800/75 border-b border-indigo-100">
+                                      <th className="pb-1 font-semibold">Fecha</th>
+                                      <th className="pb-1 font-semibold">Referencia / Glosa</th>
+                                      <th className="pb-1 font-semibold text-right">Monto</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-indigo-50/50">
+                                    {rendicion.ingresos.map((ing: any, idx: number) => (
+                                      <tr key={ing.id || idx}>
+                                        <td className="py-1.5 text-slate-600 font-medium">{format(new Date(ing.date + 'T00:00:00'), 'dd/MM/yyyy')}</td>
+                                        <td className="py-1.5 text-slate-700">{ing.reference || <span className="text-slate-400 italic">Sin referencia</span>}</td>
+                                        <td className="py-1.5 text-indigo-950 font-bold text-right">S/ {ing.amount.toFixed(2)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
                           <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Detalle de Comprobantes</h4>
                           <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm min-w-[500px]">

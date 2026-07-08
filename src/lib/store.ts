@@ -22,7 +22,7 @@ interface AppState {
   currentUser: User;
   
   enterApp: () => void;
-  addRendicion: (name: string, advanceAmount: number, comprobantes: Omit<Comprobante, 'id'>[], signature?: string, advanceDate?: string) => Promise<void>;
+  addRendicion: (name: string, advanceAmount: number, comprobantes: Omit<Comprobante, 'id'>[], signature?: string, advanceDate?: string, ingresos?: any[]) => Promise<void>;
   updateRendicion: (id: string, updates: Partial<Rendicion>) => Promise<void>;
   updateRendicionStatus: (id: string, newStatus: Rendicion['status']) => Promise<void>;
   deleteRendicion: (id: string) => Promise<void>;
@@ -44,11 +44,12 @@ export const useAppStore = create<AppState>()(
 
       enterApp: () => set({ hasEnteredApp: true }),
 
-      addRendicion: async (name, advanceAmount, comprobantes, signature, advanceDate) => {
+      addRendicion: async (name, advanceAmount, comprobantes, signature, advanceDate, ingresos) => {
         const { currentUser } = get();
         const totalAmount = comprobantes.reduce((sum, c) => sum + c.amount, 0);
         const newId = crypto.randomUUID();
-        const newRendicion: Rendicion = {
+        
+        const newRendicion: any = {
           id: newId,
           name,
           status: 'Pendiente',
@@ -58,9 +59,11 @@ export const useAppStore = create<AppState>()(
           comprobantes: comprobantes.map(c => ({ ...c, id: crypto.randomUUID() })),
           totalAmount,
           advanceAmount,
-          advanceDate,
-          signature
         };
+
+        if (advanceDate !== undefined) newRendicion.advanceDate = advanceDate;
+        if (signature !== undefined) newRendicion.signature = signature;
+        if (ingresos !== undefined) newRendicion.ingresos = ingresos;
         
         await setDoc(doc(db, 'rendiciones', newId), newRendicion);
         get().addNotification('admin1', 'Nueva Rendición', `${currentUser.name} ha enviado el bloque "${name}" por S/ ${totalAmount.toFixed(2)}.`);
@@ -69,9 +72,15 @@ export const useAppStore = create<AppState>()(
       updateRendicion: async (id, updates) => {
         const rendicionRef = doc(db, 'rendiciones', id);
         
-        const updateData: any = { ...updates };
-        if (updates.comprobantes) {
-          updateData.totalAmount = updates.comprobantes.reduce((sum, c) => sum + c.amount, 0);
+        const updateData: any = {};
+        for (const [key, value] of Object.entries(updates)) {
+          if (value !== undefined) {
+            updateData[key] = value;
+          }
+        }
+        
+        if (updateData.comprobantes) {
+          updateData.totalAmount = updateData.comprobantes.reduce((sum: number, c: any) => sum + c.amount, 0);
         }
         
         await updateDoc(rendicionRef, updateData);
