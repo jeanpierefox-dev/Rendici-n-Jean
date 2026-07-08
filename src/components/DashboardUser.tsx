@@ -105,7 +105,7 @@ export function DashboardUser() {
               <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-between items-center mt-auto">
                 <span className="text-xs text-gray-500 font-medium">{format(parseISO(rendicion.createdAt), 'dd MMM yyyy', { locale: es })}</span>
                 <Link to={`/edit/${rendicion.id}`} className="text-xs font-semibold text-blue-600 hover:underline">
-                  {rendicion.status === 'Pendiente' ? 'Editar Bloque' : 'Ver Detalle'}
+                  Editar / Agregar Gastos
                 </Link>
               </div>
             </div>

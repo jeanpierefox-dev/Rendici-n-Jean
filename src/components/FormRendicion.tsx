@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../lib/store';
 import { useNavigate, useParams } from 'react-router';
 import { fileToBase64 } from '../lib/utils';
-import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool } from 'lucide-react';
-import { Comprobante, DocType } from '../types';
+import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2 } from 'lucide-react';
+import { Comprobante, DocType, Rendicion } from '../types';
 import { format } from 'date-fns';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 export function FormRendicion() {
   const { id } = useParams<{ id: string }>();
@@ -17,19 +19,22 @@ export function FormRendicion() {
   const [advanceAmount, setAdvanceAmount] = useState('');
   const [comprobantes, setComprobantes] = useState<Omit<Comprobante, 'id'>[]>([]);
   const [signature, setSignature] = useState<string | undefined>();
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   
   useEffect(() => {
-    if (isEditing && id) {
+    if (isEditing && id && !isLoaded) {
       const existing = rendiciones.find(r => r.id === id);
       if (existing) {
         setName(existing.name);
         setAdvanceAmount(existing.advanceAmount.toString());
         setComprobantes(existing.comprobantes);
         setSignature(existing.signature);
-        setShowDocForm(false);
+        setShowDocForm(existing.comprobantes.length === 0);
+        setIsLoaded(true);
       }
     }
-  }, [id, isEditing, rendiciones]);
+  }, [id, isEditing, rendiciones, isLoaded]);
   
   // Current Form state
   const [type, setType] = useState<DocType>('Factura');
@@ -55,18 +60,51 @@ export function FormRendicion() {
     }
   };
 
-  const addDocument = (e: React.FormEvent) => {
+  const autoSaveBlock = async (
+    updatedName: string,
+    updatedAdvance: string,
+    updatedComprobantes: any[],
+    updatedSignature?: string
+  ) => {
+    if (!id || !isEditing) return;
+    setSaveStatus('saving');
+    try {
+      await updateRendicion(id, {
+        name: updatedName.trim() || 'Sin Nombre',
+        advanceAmount: parseFloat(updatedAdvance) || 0,
+        comprobantes: updatedComprobantes as Comprobante[],
+        signature: updatedSignature !== undefined ? updatedSignature : signature
+      });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (err) {
+      console.error('Error auto-saving:', err);
+      setSaveStatus('error');
+    }
+  };
+
+  const handleFieldBlur = () => {
+    if (isEditing && id) {
+      autoSaveBlock(name, advanceAmount, comprobantes, signature);
+    }
+  };
+
+  const addDocument = async (e: React.FormEvent) => {
     e.preventDefault();
-    setComprobantes([...comprobantes, {
+    const newDoc = {
+      id: crypto.randomUUID(),
       type,
       documentNumber,
       ruc,
       date: new Date(date).toISOString(),
       amount: parseFloat(amount),
       receiptPhoto,
-    }]);
+    };
     
-    // Reset form
+    const updatedComprobantes = [...comprobantes, newDoc];
+    setComprobantes(updatedComprobantes);
+    
+    // Reset Form
     setType('Factura');
     setDocumentNumber('');
     setRuc('');
@@ -74,10 +112,55 @@ export function FormRendicion() {
     setAmount('');
     setReceiptPhoto(undefined);
     setShowDocForm(false);
+
+    if (isEditing && id) {
+      // Save changes automatically in Firestore
+      await autoSaveBlock(name, advanceAmount, updatedComprobantes, signature);
+    } else {
+      // Transition from /new to /edit/:id seamlessly
+      setSaveStatus('saving');
+      try {
+        const newId = crypto.randomUUID();
+        const blockName = name.trim() || 'Rendición Temporal';
+        const blockAdvance = parseFloat(advanceAmount) || 0;
+        
+        const { currentUser } = useAppStore.getState();
+        const totalAmount = updatedComprobantes.reduce((sum, c) => sum + c.amount, 0);
+        
+        const newRendicion: Rendicion = {
+          id: newId,
+          name: blockName,
+          status: 'Pendiente',
+          createdAt: new Date().toISOString(),
+          userId: currentUser.id,
+          userName: currentUser.name,
+          comprobantes: updatedComprobantes as Comprobante[],
+          totalAmount,
+          advanceAmount: blockAdvance,
+          signature
+        };
+        
+        await setDoc(doc(db, 'rendiciones', newId), newRendicion);
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+        
+        // Redirect to edit view so that they are in continuous auto-saving mode
+        setIsLoaded(true); // Don't trigger initial loading effect since we already have local state
+        navigate(`/edit/${newId}`, { replace: true });
+      } catch (err) {
+        console.error("Error creating block on document add:", err);
+        setSaveStatus('error');
+      }
+    }
   };
 
-  const removeDocument = (index: number) => {
-    setComprobantes(comprobantes.filter((_, i) => i !== index));
+  const removeDocument = async (index: number) => {
+    const updatedComprobantes = comprobantes.filter((_, i) => i !== index);
+    setComprobantes(updatedComprobantes);
+    
+    if (isEditing && id) {
+      await autoSaveBlock(name, advanceAmount, updatedComprobantes, signature);
+    }
   };
 
   const handleSubmitBlock = async () => {
@@ -90,7 +173,8 @@ export function FormRendicion() {
           name,
           advanceAmount: parseFloat(advanceAmount) || 0,
           comprobantes: comprobantes as Comprobante[],
-          signature
+          signature,
+          status: 'Pendiente' // Enviar/guardar final siempre restablece el bloque a pendiente para que administración lo revise
         });
       } else {
         await addRendicion(name, parseFloat(advanceAmount) || 0, comprobantes, signature);
@@ -111,7 +195,7 @@ export function FormRendicion() {
           <CheckCircle className="w-8 h-8 text-green-600" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Bloque {isEditing ? 'Actualizado' : 'Registrado'}</h2>
-        <p className="text-gray-500">Tus rendiciones se han {isEditing ? 'actualizado' : 'enviado'} exitosamente.</p>
+        <p className="text-gray-500">Tus rendiciones se han {isEditing ? 'actualizado y enviado' : 'enviado'} exitosamente.</p>
       </div>
     );
   }
@@ -133,9 +217,39 @@ export function FormRendicion() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-800">{isEditing ? 'Editar Bloque de Rendición' : 'Crear Bloque de Rendición'}</h2>
-        <p className="text-sm text-gray-500 mt-1">Agrupa múltiples comprobantes en un solo envío.</p>
+      {/* Header with Cloud Sync Status */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">{isEditing ? 'Editar Bloque de Rendición' : 'Crear Bloque de Rendición'}</h2>
+          <p className="text-sm text-gray-500 mt-1">Agrupa múltiples comprobantes en un solo envío.</p>
+        </div>
+        
+        <div className="flex items-center space-x-2 text-xs font-medium">
+          {saveStatus === 'saving' && (
+            <span className="inline-flex items-center text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-full border border-amber-200 animate-pulse">
+              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5 text-amber-500" />
+              Sincronizando con la nube...
+            </span>
+          )}
+          {saveStatus === 'saved' && (
+            <span className="inline-flex items-center text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-full border border-emerald-200 shadow-sm">
+              <Cloud className="w-3.5 h-3.5 mr-1.5 text-emerald-500" />
+              Sincronizado y guardado en vivo
+            </span>
+          )}
+          {saveStatus === 'error' && (
+            <span className="inline-flex items-center text-red-600 bg-red-50 px-2.5 py-1.5 rounded-full border border-red-200">
+              <span className="w-2 h-2 rounded-full bg-red-500 mr-2"></span>
+              Error al guardar
+            </span>
+          )}
+          {saveStatus === 'idle' && isEditing && (
+            <span className="inline-flex items-center text-slate-500 bg-slate-50 px-2.5 py-1.5 rounded-full border border-slate-200 shadow-sm">
+              <Cloud className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
+              Conexión activa - Cambios autoguardados
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white border border-gray-200 shadow-sm rounded-xl p-6">
@@ -145,6 +259,7 @@ export function FormRendicion() {
             type="text" 
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onBlur={handleFieldBlur}
             placeholder="Ej. Viaje a Lima - Enero 2024"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base"
             required
@@ -158,6 +273,7 @@ export function FormRendicion() {
             min="0"
             value={advanceAmount}
             onChange={(e) => setAdvanceAmount(e.target.value)}
+            onBlur={handleFieldBlur}
             placeholder="Ej. 500.00"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base"
             required
@@ -292,6 +408,9 @@ export function FormRendicion() {
               if (file) {
                 const base64 = await fileToBase64(file);
                 setSignature(base64);
+                if (isEditing && id) {
+                  await autoSaveBlock(name, advanceAmount, comprobantes, base64);
+                }
               }
             }} 
           />
