@@ -3,8 +3,8 @@ import { useAppStore } from '../lib/store';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { exportToPDF, exportToExcel } from '../lib/export';
-import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp } from 'lucide-react';
+import { exportToPDF, exportToExcel, exportSingleRendicionPDF } from '../lib/export';
+import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp, FileText, ShieldCheck } from 'lucide-react';
 import { Rendicion } from '../types';
 
 export function DashboardAdmin() {
@@ -164,20 +164,27 @@ export function DashboardAdmin() {
                           <>
                             <button 
                               onClick={() => updateRendicionStatus(rendicion.id, 'Aprobado')}
-                              className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+                              className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors cursor-pointer"
                               title="Aprobar"
                             >
                               <Check className="w-5 h-5" />
                             </button>
                             <button 
                               onClick={() => updateRendicionStatus(rendicion.id, 'Rechazado')}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
                               title="Rechazar"
                             >
                               <X className="w-5 h-5" />
                             </button>
                           </>
                         )}
+                        <button 
+                          onClick={() => exportSingleRendicionPDF(rendicion, settings, true)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                          title="Descargar Reporte + Hoja Fedatada (PDF)"
+                        >
+                          <Download className="w-5 h-5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -276,6 +283,26 @@ export function DashboardAdmin() {
                               <img src={rendicion.signature} alt="Firma" className="h-16 w-auto object-contain border border-gray-200 rounded p-2 bg-white" />
                             </div>
                           )}
+
+                          {/* Export Actions Panel for Admins */}
+                          <div className="mt-6 pt-4 border-t border-gray-200 flex flex-wrap gap-3">
+                            <button
+                              onClick={() => exportSingleRendicionPDF(rendicion, settings, false)}
+                              className="inline-flex items-center px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-blue-200/50"
+                              title="Descargar Reporte de Liquidación de Gastos"
+                            >
+                              <FileText className="w-4 h-4 text-blue-600" />
+                              Reporte Formal PDF
+                            </button>
+                            <button
+                              onClick={() => exportSingleRendicionPDF(rendicion, settings, true)}
+                              className="inline-flex items-center px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-indigo-200/50"
+                              title="Descargar Reporte con Acta Fedatada Certificada"
+                            >
+                              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                              Descargar Hoja Fedatada
+                            </button>
+                          </div>
                         </div>
                       </td>
                     </tr>

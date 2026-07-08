@@ -3,8 +3,8 @@ import { useAppStore } from '../lib/store';
 import { Link } from 'react-router';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { FolderOpen, PlusCircle, Clock, CheckCircle2, XCircle } from 'lucide-react';
-import { exportToPDF, exportToExcel } from '../lib/export';
+import { FolderOpen, PlusCircle, Clock, CheckCircle2, XCircle, FileText, ShieldCheck } from 'lucide-react';
+import { exportToPDF, exportToExcel, exportSingleRendicionPDF } from '../lib/export';
 
 export function DashboardUser() {
   const { rendiciones, currentUser, settings } = useAppStore();
@@ -105,6 +105,26 @@ export function DashboardUser() {
                       <span>S/ {Math.abs(balance).toFixed(2)}</span>
                     </div>
                   )}
+
+                  {/* PDF Download Options */}
+                  <div className="mt-4 pt-3 border-t border-dashed border-gray-200 flex flex-col gap-2">
+                    <button
+                      onClick={() => exportSingleRendicionPDF(rendicion, settings, false)}
+                      className="w-full flex items-center justify-center px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition-colors gap-1.5 cursor-pointer"
+                      title="Descargar Reporte de Liquidación de Gastos"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      Reporte Formal (PDF)
+                    </button>
+                    <button
+                      onClick={() => exportSingleRendicionPDF(rendicion, settings, true)}
+                      className="w-full flex items-center justify-center px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-colors gap-1.5 cursor-pointer"
+                      title="Descargar Reporte con Acta Fedatada Certificada"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      Descargar Hoja Fedatada
+                    </button>
+                  </div>
                 </div>
               </div>
               
