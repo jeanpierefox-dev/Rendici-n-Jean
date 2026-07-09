@@ -4,14 +4,25 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { exportToPDF, exportToExcel, exportSingleRendicionPDF } from '../lib/export';
-import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp, FileText, ShieldCheck } from 'lucide-react';
+import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp, FileText, ShieldCheck, Trash2 } from 'lucide-react';
 import { Rendicion } from '../types';
 import { formatLocalDate } from '../lib/utils';
 
 export function DashboardAdmin() {
-  const { rendiciones, settings, updateRendicionStatus } = useAppStore();
+  const { rendiciones, settings, updateRendicionStatus, deleteRendicion } = useAppStore();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  const handleDelete = async (id: string, name: string) => {
+    if (window.confirm(`¿Estás seguro de que deseas eliminar la rendición "${name}"? Esta acción es irreversible.`)) {
+      try {
+        await deleteRendicion(id);
+      } catch (error) {
+        console.error("Error al eliminar la rendición:", error);
+        alert("Hubo un error al intentar eliminar la rendición.");
+      }
+    }
+  };
 
   // Group by month for chart
   const chartData = useMemo(() => {
@@ -186,6 +197,13 @@ export function DashboardAdmin() {
                         >
                           <Download className="w-5 h-5" />
                         </button>
+                        <button 
+                          onClick={() => handleDelete(rendicion.id, rendicion.name)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                          title="Eliminar Rendición"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -294,6 +312,14 @@ export function DashboardAdmin() {
                             >
                               <FileText className="w-4 h-4 text-blue-600" />
                               Descargar Reporte PDF
+                            </button>
+                            <button
+                              onClick={() => handleDelete(rendicion.id, rendicion.name)}
+                              className="inline-flex items-center px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-red-200/50"
+                              title="Eliminar esta rendición permanentemente"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                              Eliminar Rendición
                             </button>
                           </div>
                         </div>
