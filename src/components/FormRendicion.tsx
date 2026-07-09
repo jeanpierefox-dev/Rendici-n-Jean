@@ -53,7 +53,8 @@ export function FormRendicion() {
           setRucError('No se encontró la Razón Social');
         }
       } else {
-        setRucError('Error al conectar con SUNAT');
+        const errorData = await res.json().catch(() => ({}));
+        setRucError(errorData.error || 'Error al conectar con SUNAT');
       }
     } catch (err) {
       console.error(err);

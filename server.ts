@@ -79,65 +79,38 @@ async function startServer() {
     }
 
     try {
-      // Let's set a fast timeout for the real APIs so we don't keep the client waiting indefinitely
+      // Let's set a 3-second timeout for the real API
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-      // Try APIs sequentially or with fallback
       let success = false;
       let data: any = null;
 
       try {
-        // API 1: apis.net.pe free/open API
-        const response = await fetch(`https://dniruc.apis.net.pe/api/v1/ruc/${ruc}`, {
+        // Reliable fast free SUNAT API (v1)
+        const response = await fetch(`https://api.apis.net.pe/v1/ruc?numero=${ruc}`, {
           signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
+
         if (response.ok) {
           const json = await response.json();
-          if (json && (json.razonSocial || json.nombre)) {
+          if (json && (json.nombre || json.razonSocial)) {
             data = {
-              ruc: json.ruc || ruc,
-              razonSocial: json.razonSocial || json.nombre,
+              ruc: json.numeroDocumento || json.ruc || ruc,
+              razonSocial: json.nombre || json.razonSocial,
               direccion: json.direccion || "",
               estado: json.estado || "ACTIVO",
               condicion: json.condicion || "HABIDO",
-              source: "apis.net.pe"
+              source: "apis.net.pe-v1"
             };
             success = true;
           }
         }
       } catch (err) {
-        // Suppress and fallback
-      }
-
-      clearTimeout(timeoutId);
-
-      if (!success) {
-        // Try API 2: another common public URL if API 1 failed
-        try {
-          const controller2 = new AbortController();
-          const timeoutId2 = setTimeout(() => controller2.abort(), 1500);
-          const response2 = await fetch(`https://api.apis.net.pe/v1/ruc?numero=${ruc}`, {
-            signal: controller2.signal
-          });
-          if (response2.ok) {
-            const json = await response2.json();
-            if (json && (json.nombre || json.razonSocial)) {
-              data = {
-                ruc: json.numeroDocumento || json.ruc || ruc,
-                razonSocial: json.nombre || json.razonSocial,
-                direccion: json.direccion || "",
-                estado: json.estado || "ACTIVO",
-                condicion: json.condicion || "HABIDO",
-                source: "apis.net.pe-v1"
-              };
-              success = true;
-            }
-          }
-          clearTimeout(timeoutId2);
-        } catch (err) {
-          // Suppress and fallback
-        }
+        clearTimeout(timeoutId);
+        // Suppress and fall back
       }
 
       if (success && data) {
