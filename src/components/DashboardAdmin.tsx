@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { exportToPDF, exportToExcel, exportSingleRendicionPDF } from '../lib/export';
 import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp, FileText, ShieldCheck } from 'lucide-react';
 import { Rendicion } from '../types';
+import { formatLocalDate } from '../lib/utils';
 
 export function DashboardAdmin() {
   const { rendiciones, settings, updateRendicionStatus } = useAppStore();
@@ -179,9 +180,9 @@ export function DashboardAdmin() {
                           </>
                         )}
                         <button 
-                          onClick={() => exportSingleRendicionPDF(rendicion, settings, true)}
+                          onClick={() => exportSingleRendicionPDF(rendicion, settings)}
                           className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
-                          title="Descargar Reporte + Hoja Fedatada (PDF)"
+                          title="Descargar Reporte Completo (PDF)"
                         >
                           <Download className="w-5 h-5" />
                         </button>
@@ -234,7 +235,7 @@ export function DashboardAdmin() {
                               <tbody className="divide-y divide-gray-100">
                                 {rendicion.comprobantes.map((c, i) => (
                                   <tr key={i}>
-                                    <td className="py-2 text-gray-600">{format(new Date(c.date), 'dd/MM/yyyy')}</td>
+                                    <td className="py-2 text-gray-600">{formatLocalDate(c.date)}</td>
                                     <td className="py-2 text-gray-900 font-medium">{c.type} {c.documentNumber}</td>
                                     <td className="py-2 text-gray-600">{c.ruc}</td>
                                     <td className="py-2 text-gray-900 font-medium">S/ {c.amount.toFixed(2)}</td>
@@ -287,20 +288,12 @@ export function DashboardAdmin() {
                           {/* Export Actions Panel for Admins */}
                           <div className="mt-6 pt-4 border-t border-gray-200 flex flex-wrap gap-3">
                             <button
-                              onClick={() => exportSingleRendicionPDF(rendicion, settings, false)}
+                              onClick={() => exportSingleRendicionPDF(rendicion, settings)}
                               className="inline-flex items-center px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-blue-200/50"
-                              title="Descargar Reporte de Liquidación de Gastos"
+                              title="Descargar Reporte de Liquidación de Gastos con Comprobantes"
                             >
                               <FileText className="w-4 h-4 text-blue-600" />
-                              Reporte Formal PDF
-                            </button>
-                            <button
-                              onClick={() => exportSingleRendicionPDF(rendicion, settings, true)}
-                              className="inline-flex items-center px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-indigo-200/50"
-                              title="Descargar Reporte con Acta Fedatada Certificada"
-                            >
-                              <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                              Descargar Hoja Fedatada
+                              Descargar Reporte PDF
                             </button>
                           </div>
                         </div>

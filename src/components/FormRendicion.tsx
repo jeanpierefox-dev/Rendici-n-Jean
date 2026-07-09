@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../lib/store';
 import { useNavigate, useParams } from 'react-router';
-import { fileToBase64 } from '../lib/utils';
+import { fileToBase64, compressImageToBase64, formatLocalDate } from '../lib/utils';
 import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2, Edit3, DollarSign, Calendar, Tag } from 'lucide-react';
 import { Comprobante, DocType, Rendicion, Ingreso } from '../types';
 import { format } from 'date-fns';
@@ -77,7 +77,7 @@ export function FormRendicion() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const base64 = await fileToBase64(file);
+        const base64 = await compressImageToBase64(file, 800, 800, 0.6); // Compress to max 800px width/height and 0.6 quality (highly efficient)
         setReceiptPhoto(base64);
       } catch (err) {
         console.error('Error reading file', err);
@@ -161,7 +161,7 @@ export function FormRendicion() {
             type,
             documentNumber,
             ruc,
-            date: new Date(date).toISOString(),
+            date,
             amount: parseFloat(amount),
             receiptPhoto,
           };
@@ -175,7 +175,7 @@ export function FormRendicion() {
         type,
         documentNumber,
         ruc,
-        date: new Date(date).toISOString(),
+        date,
         amount: parseFloat(amount),
         receiptPhoto,
       };
@@ -613,7 +613,7 @@ export function FormRendicion() {
               <tbody className="divide-y divide-gray-100 text-sm">
                 {comprobantes.map((c, i) => (
                   <tr key={c.id || i} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-5 py-3 text-gray-700">{format(new Date(c.date), 'dd/MM/yyyy')}</td>
+                    <td className="px-5 py-3 text-gray-700">{formatLocalDate(c.date)}</td>
                     <td className="px-5 py-3 font-medium text-gray-900">{c.type} {c.documentNumber}</td>
                     <td className="px-5 py-3 text-gray-500">{c.ruc}</td>
                     <td className="px-5 py-3 text-right font-semibold text-gray-900">S/ {c.amount.toFixed(2)}</td>
@@ -775,7 +775,7 @@ export function FormRendicion() {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (file) {
-                const base64 = await fileToBase64(file);
+                const base64 = await compressImageToBase64(file, 600, 600, 0.6); // Compress signature to be lightweight
                 setSignature(base64);
                 if (isEditing && id) {
                   await autoSaveBlock(comprobantes, ingresos, base64);

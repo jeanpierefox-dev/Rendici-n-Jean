@@ -106,23 +106,15 @@ export function DashboardUser() {
                     </div>
                   )}
 
-                  {/* PDF Download Options */}
+                  {/* PDF Download Option */}
                   <div className="mt-4 pt-3 border-t border-dashed border-gray-200 flex flex-col gap-2">
                     <button
-                      onClick={() => exportSingleRendicionPDF(rendicion, settings, false)}
+                      onClick={() => exportSingleRendicionPDF(rendicion, settings)}
                       className="w-full flex items-center justify-center px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition-colors gap-1.5 cursor-pointer"
-                      title="Descargar Reporte de Liquidación de Gastos"
+                      title="Descargar Reporte de Liquidación de Gastos con Comprobantes"
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      Reporte Formal (PDF)
-                    </button>
-                    <button
-                      onClick={() => exportSingleRendicionPDF(rendicion, settings, true)}
-                      className="w-full flex items-center justify-center px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold transition-colors gap-1.5 cursor-pointer"
-                      title="Descargar Reporte con Acta Fedatada Certificada"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      Descargar Hoja Fedatada
+                      Descargar Reporte (PDF)
                     </button>
                   </div>
                 </div>

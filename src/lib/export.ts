@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { Rendicion, AppSettings, Ingreso } from '../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { formatLocalDate } from './utils';
 
 export const exportToPDF = (rendiciones: Rendicion[], settings: AppSettings) => {
   const doc = new jsPDF();
@@ -41,7 +42,7 @@ export const exportToPDF = (rendiciones: Rendicion[], settings: AppSettings) => 
         c.type,
         c.documentNumber,
         c.ruc,
-        format(new Date(c.date), 'dd/MM/yyyy'),
+        formatLocalDate(c.date),
         r.status,
         `S/ ${c.amount.toFixed(2)}`
       ];
@@ -85,7 +86,7 @@ export const exportToExcel = (rendiciones: Rendicion[], settings: AppSettings) =
     'Tipo Documento': c.type,
     'Número Documento': c.documentNumber,
     'RUC': c.ruc,
-    'Fecha Documento': format(new Date(c.date), 'dd/MM/yyyy'),
+    'Fecha Documento': formatLocalDate(c.date),
     'Monto (S/)': c.amount,
     'Estado': r.status,
     'Fecha Registro': format(new Date(r.createdAt), 'dd/MM/yyyy HH:mm', { locale: es })
@@ -328,7 +329,7 @@ export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSett
 
   const egresCols = ['Fecha Doc.', 'Tipo', 'Número de Comprobante', 'RUC Emisor', 'Monto'];
   const egresRows = rendicion.comprobantes.map(c => [
-    format(new Date(c.date), 'dd/MM/yyyy'),
+    formatLocalDate(c.date),
     c.type,
     c.documentNumber,
     c.ruc,
@@ -389,99 +390,77 @@ export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSett
   doc.text('Área: Administración y Finanzas', pageWidth - 85, lineY + 8);
   doc.text(`Fecha de Control: ${fechaEmision.split(' ')[0]}`, pageWidth - 85, lineY + 12);
 
-  // PAGE 2: HOJA FEDATADA (If selected)
-  if (conHojaFedatada) {
-    doc.addPage();
-    
-    // Draw Elegant Certified Borders
-    doc.setDrawColor(30, 58, 138);
-    doc.setLineWidth(1);
-    doc.rect(8, 8, pageWidth - 16, doc.internal.pageSize.getHeight() - 16);
-    
-    doc.setDrawColor(229, 231, 235);
-    doc.setLineWidth(0.3);
-    doc.rect(10, 10, pageWidth - 20, doc.internal.pageSize.getHeight() - 20);
+  // PAGE 2+: ATTACHED RECEIPT IMAGES (ANNEXES)
+  const comprobantesConFoto = rendicion.comprobantes.filter(c => c.receiptPhoto);
+  
+  if (comprobantesConFoto.length > 0) {
+    comprobantesConFoto.forEach((c, idx) => {
+      doc.addPage();
+      
+      // Page elegant frame
+      doc.setDrawColor(30, 58, 138);
+      doc.setLineWidth(0.5);
+      doc.rect(8, 8, pageWidth - 16, doc.internal.pageSize.getHeight() - 16);
+      
+      doc.setDrawColor(229, 231, 235);
+      doc.setLineWidth(0.3);
+      doc.rect(10, 10, pageWidth - 20, doc.internal.pageSize.getHeight() - 20);
+      
+      // Header for Annex
+      doc.setFillColor(243, 244, 246);
+      doc.rect(12, 12, pageWidth - 24, 22, 'F');
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(30, 58, 138);
+      doc.text(`IMAGEN DE COMPROBANTE DE PAGO ADJUNTO (ANEXO N° ${idx + 1})`, 16, 20);
+      
+      doc.setFontSize(7.5);
+      doc.setTextColor(107, 114, 128);
+      doc.text(`Bloque: ${rendicion.name} | Colaborador: ${rendicion.userName}`, 16, 26);
+      
+      // Invoice summary on the right of the header
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(31, 41, 55);
+      doc.text(`${c.type} N° ${c.documentNumber}`, pageWidth - 16, 19, { align: 'right' });
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(75, 85, 99);
+      doc.text(`RUC: ${c.ruc}  |  Fecha: ${formatLocalDate(c.date)}  |  Monto: S/ ${c.amount.toFixed(2)}`, pageWidth - 16, 25, { align: 'right' });
+      
+      // Draw a line separator
+      doc.setDrawColor(209, 213, 219);
+      doc.line(12, 34, pageWidth - 12, 34);
 
-    // Fedatada Header
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(30, 58, 138);
-    doc.text('HOJA FEDATADA Y CONVALIDACIÓN TRIBUTARIA', pageWidth / 2, 22, { align: 'center' });
-    
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(107, 114, 128);
-    doc.text('SISTEMA CORPORATIVO DE CONTROL INTERNO DE RENDICIONES', pageWidth / 2, 27, { align: 'center' });
-
-    // Dividers
-    doc.setDrawColor(30, 58, 138);
-    doc.setLineWidth(0.5);
-    doc.line(30, 31, pageWidth - 30, 31);
-
-    // Certification Act Text
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(17, 24, 39);
-    doc.text('ACTA DE VALIDACIÓN Y DECLARACIÓN JURADA FEDATADA', 18, 42);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(55, 65, 81);
-    
-    const textActa = `Por medio del presente documento, se hace constar que el Departamento de Auditoría Interna, Contabilidad y Control de Gestión de ${settings.companyName.toUpperCase()}, ha procedido con la verificación integral (física, digital y tributaria) del bloque de rendición denominado "${rendicion.name}" con código #${rendicion.id.substring(0, 8).toUpperCase()}, de titularidad del colaborador ${rendicion.userName.toUpperCase()}.\n\nSe deja expresa constancia bajo fe de juramento fedatario lo siguiente:`;
-    
-    const splitActa = doc.splitTextToSize(textActa, pageWidth - 36);
-    doc.text(splitActa, 18, 48);
-
-    // Bullet Points of Verification
-    doc.setFont('helvetica', 'bold');
-    doc.text('1. INTEGRIDAD DOCUMENTAL:', 18, 82);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Se verificaron exitosamente un total de ${rendicion.comprobantes.length} comprobantes de pago adjuntos en este bloque, validando RUC, tipo de comprobante, numeración correlativa, fechas correctas y congruencia con las normativas locales de egresos.`, 22, 87, { maxWidth: pageWidth - 40 });
-
-    doc.setFont('helvetica', 'bold');
-    doc.text('2. AUDITORÍA FINANCIERA:', 18, 102);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`La auditoría matemática de ingresos (S/ ${totalRecibido.toFixed(2)}) y egresos declarados (S/ ${totalGastado.toFixed(2)}) arrojó un saldo resultante auditado de S/ ${Math.abs(balance).toFixed(2)}, el cual ha sido catalogado como "${balance >= 0 ? 'A Devolver a favor de la Empresa' : 'A Reembolsar a favor del Empleado'}".`, 22, 107, { maxWidth: pageWidth - 40 });
-
-    doc.setFont('helvetica', 'bold');
-    doc.text('3. DECLARACIÓN FEDATADA DE VALIDEZ:', 18, 122);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Los comprobantes examinados cumplen plenamente con las exigencias formales de deducibilidad, se consideran procedentes y legalmente aptos para su contabilización, declarándose HÁBILES y CONVALIDADOS.', 22, 127, { maxWidth: pageWidth - 40 });
-
-    // Official Seal and Stamp Graphics
-    const sealY = 148;
-    doc.setDrawColor(30, 58, 138);
-    doc.setLineWidth(1.5);
-    doc.rect(pageWidth / 2 - 30, sealY, 60, 30);
-    
-    doc.setDrawColor(30, 58, 138);
-    doc.setLineWidth(0.3);
-    doc.rect(pageWidth / 2 - 28, sealY + 2, 56, 26);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(30, 58, 138);
-    doc.text('FEDATADO Y CONFORMADO', pageWidth / 2, sealY + 9, { align: 'center' });
-    doc.setFontSize(7);
-    doc.text(settings.companyName.toUpperCase(), pageWidth / 2, sealY + 15, { align: 'center' });
-    doc.text(`CÓDIGO: CONT-${rendicion.id.substring(0,6).toUpperCase()}`, pageWidth / 2, sealY + 20, { align: 'center' });
-    doc.setFontSize(6);
-    doc.text('DPTO. AUDITORÍA INTERNA', pageWidth / 2, sealY + 25, { align: 'center' });
-
-    // Stamped certification signature space at the very bottom
-    const certSignY = 205;
-    doc.line(55, certSignY, pageWidth - 55, certSignY);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(17, 24, 39);
-    doc.text('FIRMA DEL FEDATARIO CORPORATIVO', pageWidth / 2, certSignY + 5, { align: 'center' });
-    
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(107, 114, 128);
-    doc.text('Auditor / Fedatario Colegiado Responsable de Control Financiero', pageWidth / 2, certSignY + 10, { align: 'center' });
-    doc.text(`Fecha de Certificación Fedataria: ${fechaEmision.split(' ')[0]}`, pageWidth / 2, certSignY + 14, { align: 'center' });
+      // Add receipt photo image centered in the space
+      if (c.receiptPhoto) {
+        try {
+          let formatType = 'JPEG';
+          if (c.receiptPhoto.startsWith('data:image/png')) {
+            formatType = 'PNG';
+          } else if (c.receiptPhoto.startsWith('data:image/gif')) {
+            formatType = 'GIF';
+          }
+          
+          // Center image on the page
+          const imgWidth = 140;
+          const imgHeight = 210;
+          const imgX = (pageWidth - imgWidth) / 2;
+          const imgY = 42;
+          
+          doc.addImage(c.receiptPhoto, formatType, imgX, imgY, imgWidth, imgHeight, undefined, 'FAST');
+        } catch (imgError) {
+          console.error("Could not render receipt image in PDF", imgError);
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(9);
+          doc.setTextColor(220, 38, 38);
+          doc.text("No se pudo renderizar la imagen del comprobante en el archivo PDF.", pageWidth / 2, 100, { align: 'center' });
+          doc.text("La imagen original se conserva de forma segura en la plataforma.", pageWidth / 2, 105, { align: 'center' });
+        }
+      }
+    });
   }
 
   // Save the document named specifically based on user name & block name
