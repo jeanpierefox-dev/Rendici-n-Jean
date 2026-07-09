@@ -40,7 +40,7 @@ export function FormRendicion() {
   const [rucError, setRucError] = useState('');
 
   const fetchRucInfo = async (rucVal: string) => {
-    if (!rucVal || rucVal.length !== 11) return;
+    if (!rucVal || (rucVal.length !== 11 && rucVal.length !== 8)) return;
     setLoadingRuc(true);
     setRucError('');
     try {
@@ -50,11 +50,11 @@ export function FormRendicion() {
         if (data && data.razonSocial) {
           setRazonSocial(data.razonSocial);
         } else {
-          setRucError('No se encontró la Razón Social');
+          setRucError(rucVal.length === 8 ? 'No se encontró el DNI' : 'No se encontró la Razón Social');
         }
       } else {
         const errorData = await res.json().catch(() => ({}));
-        setRucError(errorData.error || 'Error al conectar con SUNAT');
+        setRucError(errorData.error || (rucVal.length === 8 ? 'Error al conectar para buscar DNI' : 'Error al conectar con SUNAT'));
       }
     } catch (err) {
       console.error(err);
@@ -67,7 +67,7 @@ export function FormRendicion() {
   const handleRucChange = (val: string) => {
     const cleanVal = val.replace(/[^0-9]/g, '');
     setRuc(cleanVal);
-    if (cleanVal.length === 11) {
+    if (cleanVal.length === 11 || cleanVal.length === 8) {
       fetchRucInfo(cleanVal);
     } else {
       setRazonSocial('');
@@ -748,7 +748,7 @@ export function FormRendicion() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1 flex justify-between items-center">
-                  <span>RUC Emisor (11 dígitos)</span>
+                  <span>RUC (11 dígitos) o DNI (8 dígitos) del Emisor</span>
                   {loadingRuc && <span className="text-[10px] text-blue-600 animate-pulse font-medium">Buscando...</span>}
                   {rucError && <span className="text-[10px] text-red-500 font-medium">{rucError}</span>}
                 </label>
@@ -758,14 +758,14 @@ export function FormRendicion() {
                     maxLength={11} 
                     value={ruc} 
                     onChange={(e) => handleRucChange(e.target.value)} 
-                    placeholder="Ej. 20123456789"
+                    placeholder="Ej. 20131312955 o DNI"
                     className="w-full pl-3 pr-16 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" 
                     required 
                   />
                   <button
                     type="button"
                     onClick={() => fetchRucInfo(ruc)}
-                    disabled={ruc.length !== 11 || loadingRuc}
+                    disabled={(ruc.length !== 11 && ruc.length !== 8) || loadingRuc}
                     className="absolute right-1.5 top-1.5 bottom-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 border border-slate-300 rounded text-[10px] font-bold transition-colors cursor-pointer"
                   >
                     Buscar

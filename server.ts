@@ -74,8 +74,8 @@ async function startServer() {
   app.get("/api/ruc/:ruc", async (req, res) => {
     const { ruc } = req.params;
 
-    if (!ruc || ruc.length !== 11 || !/^\d+$/.test(ruc)) {
-      return res.status(400).json({ error: "El RUC debe tener exactamente 11 dígitos numéricos." });
+    if (!ruc || (ruc.length !== 11 && ruc.length !== 8) || !/^\d+$/.test(ruc)) {
+      return res.status(400).json({ error: "El documento debe ser un RUC (11 dígitos) o DNI (8 dígitos) válido." });
     }
 
     try {
@@ -87,25 +87,49 @@ async function startServer() {
       let data: any = null;
 
       try {
-        // Reliable fast free SUNAT API (v1)
-        const response = await fetch(`https://api.apis.net.pe/v1/ruc?numero=${ruc}`, {
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
+        if (ruc.length === 8) {
+          // Query DNI via apis.net.pe
+          const response = await fetch(`https://api.apis.net.pe/v1/dni?numero=${ruc}`, {
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
 
-        if (response.ok) {
-          const json = await response.json();
-          if (json && (json.nombre || json.razonSocial)) {
-            data = {
-              ruc: json.numeroDocumento || json.ruc || ruc,
-              razonSocial: json.nombre || json.razonSocial,
-              direccion: json.direccion || "",
-              estado: json.estado || "ACTIVO",
-              condicion: json.condicion || "HABIDO",
-              source: "apis.net.pe-v1"
-            };
-            success = true;
+          if (response.ok) {
+            const json = await response.json();
+            if (json && json.nombre) {
+              data = {
+                ruc,
+                razonSocial: json.nombre,
+                direccion: json.direccion || "",
+                estado: "ACTIVO",
+                condicion: "HABIDO",
+                source: "apis.net.pe-dni"
+              };
+              success = true;
+            }
+          }
+        } else {
+          // Query RUC via apis.net.pe
+          const response = await fetch(`https://api.apis.net.pe/v1/ruc?numero=${ruc}`, {
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const json = await response.json();
+            if (json && (json.nombre || json.razonSocial)) {
+              data = {
+                ruc: json.numeroDocumento || json.ruc || ruc,
+                razonSocial: json.nombre || json.razonSocial,
+                direccion: json.direccion || "",
+                estado: json.estado || "ACTIVO",
+                condicion: json.condicion || "HABIDO",
+                source: "apis.net.pe-v1"
+              };
+              success = true;
+            }
           }
         }
       } catch (err) {
