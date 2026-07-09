@@ -28,7 +28,7 @@ export const exportToPDF = (rendiciones: Rendicion[], settings: AppSettings) => 
   doc.text(`Fecha de emisión: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 54);
 
   // Table
-  const tableColumn = ["Bloque", "Usuario", "Tipo Doc.", "Número", "RUC", "Fecha Doc.", "Estado", "Monto"];
+  const tableColumn = ["Bloque", "Usuario", "Categoría / Obs.", "Tipo Doc.", "Número", "Fecha Doc.", "Monto"];
   const tableRows: any[] = [];
   
   let total = 0;
@@ -39,11 +39,10 @@ export const exportToPDF = (rendiciones: Rendicion[], settings: AppSettings) => 
       const rData = [
         r.name,
         r.userName,
+        c.observation ? `${c.category || 'Otros'} (${c.observation})` : (c.category || 'Otros'),
         c.type,
         c.documentNumber,
-        c.ruc,
         formatLocalDate(c.date),
-        r.status,
         `S/ ${c.amount.toFixed(2)}`
       ];
       tableRows.push(rData);
@@ -86,6 +85,8 @@ export const exportToExcel = (rendiciones: Rendicion[], settings: AppSettings) =
     'Tipo Documento': c.type,
     'Número Documento': c.documentNumber,
     'RUC': c.ruc,
+    'Categoría': c.category || 'Otros',
+    'Observación': c.observation || '',
     'Fecha Documento': formatLocalDate(c.date),
     'Monto (S/)': c.amount,
     'Estado': r.status,
@@ -104,6 +105,8 @@ export const exportToExcel = (rendiciones: Rendicion[], settings: AppSettings) =
     {wch: 15}, // Tipo
     {wch: 20}, // Num
     {wch: 15}, // RUC
+    {wch: 18}, // Categoría
+    {wch: 25}, // Observación
     {wch: 15}, // Fecha
     {wch: 12}, // Monto
     {wch: 15}, // Estado
@@ -327,12 +330,13 @@ export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSett
   doc.setTextColor(30, 58, 138);
   doc.text('DETALLE DE EGRESOS (COMPROBANTES REPORTADOS)', 14, currentY);
 
-  const egresCols = ['Fecha Doc.', 'Tipo', 'Número de Comprobante', 'RUC Emisor', 'Monto'];
+  const egresCols = ['Fecha Doc.', 'Tipo', 'N° Comprobante', 'RUC Emisor', 'Categoría / Obs.', 'Monto'];
   const egresRows = rendicion.comprobantes.map(c => [
     formatLocalDate(c.date),
     c.type,
     c.documentNumber,
     c.ruc,
+    c.observation ? `${c.category || 'Otros'} (${c.observation})` : (c.category || 'Otros'),
     `S/ ${c.amount.toFixed(2)}`
   ]);
 
@@ -344,11 +348,12 @@ export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSett
     styles: { font: 'helvetica', fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
     columnStyles: {
-      0: { cellWidth: 25 },
-      1: { cellWidth: 25 },
-      2: { cellWidth: 'auto' },
-      3: { cellWidth: 35 },
-      4: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
+      0: { cellWidth: 22 },
+      1: { cellWidth: 15 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 25 },
+      4: { cellWidth: 'auto' },
+      5: { cellWidth: 25, halign: 'right', fontStyle: 'bold' }
     }
   });
 

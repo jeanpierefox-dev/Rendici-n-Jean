@@ -31,6 +31,8 @@ export function FormRendicion() {
   const [date, setDate] = useState('');
   const [amount, setAmount] = useState('');
   const [receiptPhoto, setReceiptPhoto] = useState<string | undefined>();
+  const [category, setCategory] = useState('Transporte');
+  const [observation, setObservation] = useState('');
   const [showDocForm, setShowDocForm] = useState(true);
 
   // Ingreso Form state
@@ -133,6 +135,8 @@ export function FormRendicion() {
     setDate(formattedDate);
     setAmount(comp.amount.toString());
     setReceiptPhoto(comp.receiptPhoto);
+    setCategory(comp.category || 'Transporte');
+    setObservation(comp.observation || '');
     setShowDocForm(true);
   };
 
@@ -144,6 +148,8 @@ export function FormRendicion() {
     setDate('');
     setAmount('');
     setReceiptPhoto(undefined);
+    setCategory('Transporte');
+    setObservation('');
     setShowDocForm(comprobantes.length === 0);
   };
 
@@ -164,6 +170,8 @@ export function FormRendicion() {
             date,
             amount: parseFloat(amount),
             receiptPhoto,
+            category,
+            observation: category === 'Otros' || observation ? observation : '',
           };
         }
         return c;
@@ -178,6 +186,8 @@ export function FormRendicion() {
         date,
         amount: parseFloat(amount),
         receiptPhoto,
+        category,
+        observation: category === 'Otros' || observation ? observation : '',
       };
       updatedComprobantes = [...comprobantes, newDoc];
     }
@@ -192,6 +202,8 @@ export function FormRendicion() {
     setDate('');
     setAmount('');
     setReceiptPhoto(undefined);
+    setCategory('Transporte');
+    setObservation('');
     setShowDocForm(false);
 
     if (isEditing && id) {
@@ -606,6 +618,7 @@ export function FormRendicion() {
                   <th className="px-5 py-3">Fecha</th>
                   <th className="px-5 py-3">Tipo Documento</th>
                   <th className="px-5 py-3">RUC</th>
+                  <th className="px-5 py-3">Categoría / Obs.</th>
                   <th className="px-5 py-3 text-right">Monto</th>
                   <th className="px-5 py-3 text-right">Acciones</th>
                 </tr>
@@ -616,6 +629,10 @@ export function FormRendicion() {
                     <td className="px-5 py-3 text-gray-700">{formatLocalDate(c.date)}</td>
                     <td className="px-5 py-3 font-medium text-gray-900">{c.type} {c.documentNumber}</td>
                     <td className="px-5 py-3 text-gray-500">{c.ruc}</td>
+                    <td className="px-5 py-3 text-gray-700">
+                      <span className="font-semibold text-slate-800">{c.category || 'Otros'}</span>
+                      {c.observation && <span className="block text-xs text-gray-400 mt-0.5 max-w-[200px] truncate" title={c.observation}>{c.observation}</span>}
+                    </td>
                     <td className="px-5 py-3 text-right font-semibold text-gray-900">S/ {c.amount.toFixed(2)}</td>
                     <td className="px-5 py-3 text-right space-x-1">
                       <button 
@@ -711,6 +728,38 @@ export function FormRendicion() {
                   placeholder="Ej. 120.50"
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
                   required 
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Categoría / Tipo de Gasto</label>
+                <select 
+                  value={category} 
+                  onChange={(e) => setCategory(e.target.value)} 
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" 
+                  required
+                >
+                  <option value="Transporte">Transporte</option>
+                  <option value="Alimentación (Desayuno)">Alimentación (Desayuno)</option>
+                  <option value="Alimentación (Almuerzo)">Alimentación (Almuerzo)</option>
+                  <option value="Alimentación (Cena)">Alimentación (Cena)</option>
+                  <option value="Bebidas">Bebidas</option>
+                  <option value="Gasolina">Gasolina</option>
+                  <option value="Otros">Otros (especificar)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Observación {category === 'Otros' ? '(Especificar)' : '(Opcional)'} {category === 'Otros' && <span className="text-red-500 font-bold">*</span>}
+                </label>
+                <input 
+                  type="text" 
+                  value={observation} 
+                  onChange={(e) => setObservation(e.target.value)} 
+                  placeholder={category === 'Otros' ? "Especifique el gasto aquí" : "Detalle adicional opcional"}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                  required={category === 'Otros'}
                 />
               </div>
               

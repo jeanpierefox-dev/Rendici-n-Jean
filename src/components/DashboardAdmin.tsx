@@ -246,6 +246,7 @@ export function DashboardAdmin() {
                                   <th className="pb-2 font-medium">Fecha</th>
                                   <th className="pb-2 font-medium">Tipo y N°</th>
                                   <th className="pb-2 font-medium">RUC</th>
+                                  <th className="pb-2 font-medium">Categoría / Obs.</th>
                                   <th className="pb-2 font-medium">Monto</th>
                                   <th className="pb-2 font-medium text-right">Comprobante</th>
                                 </tr>
@@ -256,6 +257,10 @@ export function DashboardAdmin() {
                                     <td className="py-2 text-gray-600">{formatLocalDate(c.date)}</td>
                                     <td className="py-2 text-gray-900 font-medium">{c.type} {c.documentNumber}</td>
                                     <td className="py-2 text-gray-600">{c.ruc}</td>
+                                    <td className="py-2 text-gray-700">
+                                      <span className="font-semibold text-slate-800">{c.category || 'Otros'}</span>
+                                      {c.observation && <span className="block text-xs text-gray-400 mt-0.5 max-w-[200px] truncate" title={c.observation}>{c.observation}</span>}
+                                    </td>
                                     <td className="py-2 text-gray-900 font-medium">S/ {c.amount.toFixed(2)}</td>
                                     <td className="py-2 text-right">
                                       {c.receiptPhoto ? (

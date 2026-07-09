@@ -9,6 +9,8 @@ export interface Comprobante {
   date: string; // ISO string
   amount: number;
   receiptPhoto?: string; // base64
+  category?: string;
+  observation?: string;
 }
 
 export interface Ingreso {
