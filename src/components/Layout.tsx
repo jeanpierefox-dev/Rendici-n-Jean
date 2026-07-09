@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAppStore } from '../lib/store';
 import { auth } from '../lib/firebase';
 import { NotificationBell } from './NotificationBell';
-import { LayoutDashboard, FileText, Settings, LogOut, UserCircle, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FileText, Settings, LogOut, UserCircle, Menu, X, Users } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Link, useLocation } from 'react-router';
 
@@ -20,6 +20,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navItems = currentUser.role === 'admin' 
     ? [
         { label: 'Panel Administrativo', icon: LayoutDashboard, path: '/admin' },
+        { label: 'Gestionar Usuarios', icon: Users, path: '/users' },
         { label: 'Configuración', icon: Settings, path: '/settings' },
       ]
     : [
@@ -30,13 +31,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const renderSidebarContent = (onLinkClick?: () => void) => (
     <>
       <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800 bg-slate-950/50">
-        {settings.companyLogo ? (
-          <img src={settings.companyLogo} alt="Logo" className="h-8 max-w-[150px] object-contain brightness-0 invert" />
-        ) : (
-          <span className="font-bold text-lg text-white truncate">
-            {settings.companyName}
-          </span>
-        )}
+        <span className="font-extrabold text-lg text-white tracking-tight truncate">
+          Jeanpiere-Barboza
+        </span>
         {onLinkClick && (
           <button 
             onClick={onLinkClick} 
@@ -79,32 +76,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <p className="text-xs text-slate-400 capitalize">{currentUser.role}</p>
             </div>
           </div>
-          
-          <button
-            onClick={async () => {
-              const newRole = currentUser.role === 'admin' ? 'user' : 'admin';
-              
-              // 1. Update global store state instantly
-              useAppStore.setState({
-                currentUser: { ...currentUser, role: newRole }
-              });
-
-              // 2. Persist to Firestore if we are connected with Google
-              if (auth.currentUser) {
-                try {
-                  const { doc, setDoc } = await import('firebase/firestore');
-                  const { db } = await import('../lib/firebase');
-                  await setDoc(doc(db, 'users', auth.currentUser.uid), { role: newRole }, { merge: true });
-                } catch (e) {
-                  console.error("No se pudo actualizar el rol en Firestore:", e);
-                }
-              }
-            }}
-            className="text-[10px] bg-slate-800 hover:bg-slate-700 hover:text-white text-blue-400 font-medium px-2 py-1 rounded border border-slate-700 transition-colors"
-            title="Cambiar entre Administrador y Colaborador"
-          >
-            Cambiar Rol
-          </button>
         </div>
         
         <button 
@@ -131,13 +102,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          {settings.companyLogo ? (
-            <img src={settings.companyLogo} alt="Logo" className="h-6 max-w-[120px] object-contain brightness-0 invert" />
-          ) : (
-            <span className="font-bold text-base text-white truncate max-w-[150px]">
-              {settings.companyName}
-            </span>
-          )}
+          <span className="font-extrabold text-base text-white tracking-tight truncate max-w-[150px]">
+            Jeanpiere-Barboza
+          </span>
         </div>
         <div className="flex items-center space-x-2">
           <button 

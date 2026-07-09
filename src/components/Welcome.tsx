@@ -11,7 +11,6 @@ export function Welcome() {
   // Custom Login States
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState<'user' | 'admin'>('user');
   
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -36,8 +35,8 @@ export function Welcome() {
       setSuccessMessage('');
       setLoading(true);
 
-      // Create a stable deterministic user ID from the username
-      const cleanId = 'user_' + cleanUsername.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const lowercaseUsername = cleanUsername.toLowerCase().replace(/[^a-z0-9_]/g, '');
+      const cleanId = 'user_' + lowercaseUsername;
       
       const userRef = doc(db, 'users', cleanId);
       const docSnap = await getDoc(userRef);
@@ -50,64 +49,51 @@ export function Welcome() {
           throw new Error('La contraseña ingresada es incorrecta para este usuario.');
         }
 
-        // If password is correct, we log them in and update current state
-        const updatedUser = {
+        // If password is correct, log them in using the database role
+        const loggedInUser = {
           id: cleanId,
           name: existingData.name || cleanUsername,
-          role: selectedRole, // Allow them to choose or keep existing
+          role: existingData.role || 'user',
           email: existingData.email || `${cleanId}@empresa.com`,
           department: existingData.department || 'General',
           ...existingData,
         } as any;
 
-        await setDoc(userRef, updatedUser, { merge: true });
-        setCurrentUser(updatedUser);
+        setCurrentUser(loggedInUser);
         setSuccessMessage('¡Ingreso exitoso!');
         setTimeout(() => {
           enterApp();
         }, 800);
       } else {
-        // Create new user in the cloud DB
-        const newUserDoc = {
-          id: cleanId,
-          name: cleanUsername,
-          role: selectedRole,
-          password: cleanPassword,
-          email: `${cleanId}@empresa.com`,
-          department: 'General',
-          createdAt: new Date().toISOString()
-        };
+        // If user does not exist, only allow "admin" to self-register as bootstrap admin.
+        if (lowercaseUsername === 'admin') {
+          const newUserDoc = {
+            id: cleanId,
+            name: 'Administrador Principal',
+            role: 'admin' as const,
+            password: cleanPassword,
+            email: 'admin@empresa.com',
+            department: 'Administración',
+            createdAt: new Date().toISOString()
+          };
 
-        await setDoc(userRef, newUserDoc);
-        setCurrentUser(newUserDoc);
-        setSuccessMessage('¡Usuario registrado y conectado a la nube!');
-        setTimeout(() => {
-          enterApp();
-        }, 800);
+          await setDoc(userRef, newUserDoc);
+          setCurrentUser(newUserDoc);
+          setSuccessMessage('¡Usuario "admin" creado con éxito! Iniciando sesión...');
+          setTimeout(() => {
+            enterApp();
+          }, 800);
+        } else {
+          throw new Error('Su usuario no está registrado. Por favor, solicite a un Administrador que cree su cuenta.');
+        }
       }
     } catch (error: any) {
-      console.error("Firebase connection error, falling back securely:", error);
+      console.error("Login or Firebase connection error:", error);
       
-      // Detailed user-friendly message
-      if (error.message && error.message.includes('incorrecta')) {
+      if (error.message && (error.message.includes('incorrecta') || error.message.includes('no está registrado'))) {
         setErrorMessage(error.message);
       } else {
-        // Safe database bypass if there's any network or credential issue
-        setErrorMessage(`Aviso: Usando conexión local. Iniciando sesión...`);
-        
-        const fallbackUser = {
-          id: 'user_' + cleanUsername.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-          name: cleanUsername,
-          role: selectedRole,
-          password: cleanPassword,
-          email: `${cleanUsername.toLowerCase()}@empresa.com`,
-          department: 'General'
-        };
-
-        setTimeout(() => {
-          setCurrentUser(fallbackUser);
-          enterApp();
-        }, 1200);
+        setErrorMessage(`Error de conexión a la nube. Por favor, verifique su red.`);
       }
     } finally {
       setLoading(false);
@@ -193,29 +179,10 @@ export function Welcome() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                Rol / Nivel de Acceso
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-500">
-                  <Briefcase className="w-4 h-4" />
-                </span>
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as 'user' | 'admin')}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 pl-11 pr-4 text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all appearance-none cursor-pointer"
-                >
-                  <option value="user" className="bg-slate-900 text-white">Colaborador (Nueva Rendición / Mis Bloques)</option>
-                  <option value="admin" className="bg-slate-900 text-white">Administrador (Panel de Control & Aprobaciones)</option>
-                </select>
-              </div>
-            </div>
-
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-4 py-3.5 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-md flex items-center justify-center space-x-2 disabled:opacity-70 text-sm"
+              className="w-full mt-6 py-3.5 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-md flex items-center justify-center space-x-2 disabled:opacity-70 text-sm cursor-pointer"
             >
               <ShieldCheck className="w-5 h-5" />
               <span>{loading ? 'Ingresando...' : 'Ingresar y Sincronizar'}</span>

@@ -1,15 +1,33 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAppStore } from '../lib/store';
 import { Link } from 'react-router';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { FolderOpen, PlusCircle, Clock, CheckCircle2, XCircle, FileText, ShieldCheck } from 'lucide-react';
-import { exportToPDF, exportToExcel, exportSingleRendicionPDF } from '../lib/export';
+import { 
+  FolderOpen, PlusCircle, Clock, CheckCircle2, XCircle, 
+  FileText, ChevronDown, ChevronUp, Calendar, Pencil, 
+  Coins, Landmark, AlertCircle, ArrowRight
+} from 'lucide-react';
+import { exportToPDF, exportSingleRendicionPDF } from '../lib/export';
 
 export function DashboardUser() {
   const { rendiciones, currentUser, settings } = useAppStore();
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
+  // Filter only current user's rendiciones
   const myRendiciones = rendiciones.filter(r => r.userId === currentUser.id);
+
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
+    // Avoid triggering expand if clicking on active buttons inside the row
+    const target = e.target as HTMLElement;
+    if (target.closest('a') || target.closest('button')) {
+      return;
+    }
+    setExpandedIds(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -31,103 +49,214 @@ export function DashboardUser() {
 
   return (
     <div className="space-y-6">
+      {/* Header section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Mis Rendiciones (Bloques)</h2>
-          <p className="text-sm text-gray-500 mt-1">Gestiona y revisa el estado de tus bloques de gastos reportados.</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Revisa, gestiona y reporta tus gastos organizados en bloques de rendición.
+          </p>
         </div>
         <div className="flex gap-3 w-full sm:w-auto">
           <button 
             onClick={() => exportToPDF(myRendiciones, settings)}
-            className="flex-1 sm:flex-none text-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex-1 sm:flex-none text-center px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer shadow-xs"
           >
-            Exportar PDF
+            Exportar Todos PDF
           </button>
           <Link 
             to="/new" 
-            className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+            className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-xs"
           >
-            <PlusCircle className="w-4 h-4 mr-2" />
+            <PlusCircle className="w-4.5 h-4.5 mr-2" />
             Nuevo Bloque
           </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Main expandable list */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         {myRendiciones.length === 0 ? (
-          <div className="col-span-full bg-white rounded-xl border border-gray-200 p-12 text-center flex flex-col items-center shadow-sm">
+          <div className="bg-white rounded-xl p-12 text-center flex flex-col items-center">
             <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
               <FolderOpen className="w-8 h-8 text-blue-500" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-1">No hay bloques de rendiciones</h3>
-            <p className="text-gray-500 mb-6">Aún no has agrupado ningún gasto.</p>
-            <Link to="/new" className="text-blue-600 font-medium hover:underline">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">No hay bloques de rendiciones</h3>
+            <p className="text-gray-500 text-sm mb-6">Aún no has registrado ningún bloque de gastos.</p>
+            <Link 
+              to="/new" 
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-xs"
+            >
               Crear tu primer bloque
             </Link>
           </div>
         ) : (
-          myRendiciones.map((rendicion) => {
-            const advance = rendicion.advanceAmount || 0;
-            const balance = advance - rendicion.totalAmount;
-            return (
-            <div key={rendicion.id} className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
-              <div className="p-5 flex-1">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="font-semibold text-lg text-slate-800 truncate pr-2">{rendicion.name}</h3>
-                  <div className={`inline-flex items-center px-2 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wide ${getStatusClass(rendicion.status)}`}>
-                    {getStatusIcon(rendicion.status)}
-                    <span className="ml-1.5">{rendicion.status}</span>
-                  </div>
-                </div>
-                
-                <div className="space-y-2 text-sm text-gray-600">
-                  <div className="flex justify-between">
-                    <span>Monto Entregado:</span>
-                    <span className="font-medium text-gray-900">S/ {advance.toFixed(2)}</span>
-                  </div>
-                  {rendicion.advanceDate && (
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>F. Desembolso:</span>
-                      <span className="font-medium">{format(new Date(rendicion.advanceDate + 'T00:00:00'), 'dd/MM/yyyy')}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span>Documentos:</span>
-                    <span className="font-medium text-gray-900">{rendicion.comprobantes.length}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 mt-2 border-t border-gray-100">
-                    <span className="font-medium">Total Gastado:</span>
-                    <span className="font-bold text-gray-900">S/ {rendicion.totalAmount.toFixed(2)}</span>
-                  </div>
-                  {advance > 0 && (
-                    <div className={`flex justify-between font-bold ${balance > 0 ? 'text-amber-600' : balance < 0 ? 'text-blue-600' : 'text-green-600'}`}>
-                      <span>{balance > 0 ? 'A Devolver:' : balance < 0 ? 'A Reembolsar:' : 'Saldo Exacto:'}</span>
-                      <span>S/ {Math.abs(balance).toFixed(2)}</span>
-                    </div>
-                  )}
+          <div className="divide-y divide-gray-200">
+            {myRendiciones.map((rendicion) => {
+              const advance = rendicion.advanceAmount || 0;
+              const balance = advance - rendicion.totalAmount;
+              const isExpanded = !!expandedIds[rendicion.id];
+              const createdDateFormatted = format(parseISO(rendicion.createdAt), 'dd MMM yyyy', { locale: es });
 
-                  {/* PDF Download Option */}
-                  <div className="mt-4 pt-3 border-t border-dashed border-gray-200 flex flex-col gap-2">
-                    <button
-                      onClick={() => exportSingleRendicionPDF(rendicion, settings)}
-                      className="w-full flex items-center justify-center px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition-colors gap-1.5 cursor-pointer"
-                      title="Descargar Reporte de Liquidación de Gastos con Comprobantes"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      Descargar Reporte (PDF)
-                    </button>
+              return (
+                <div 
+                  key={rendicion.id} 
+                  className={`transition-colors ${isExpanded ? 'bg-slate-50/40' : 'hover:bg-gray-50/50'}`}
+                >
+                  {/* List Row Header (Always visible) */}
+                  <div 
+                    onClick={(e) => toggleExpand(rendicion.id, e)}
+                    className="p-4 sm:p-5 flex items-center justify-between cursor-pointer select-none transition-all"
+                  >
+                    <div className="flex items-center space-x-3 min-w-0 flex-1">
+                      {/* Date Column */}
+                      <div className="flex flex-col shrink-0 items-center justify-center w-14 sm:w-16 h-14 bg-gray-100 border border-gray-200/60 rounded-xl p-1 text-center">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                          {format(parseISO(rendicion.createdAt), 'MMM', { locale: es }).substring(0, 3)}
+                        </span>
+                        <span className="text-base font-extrabold text-gray-800 leading-none">
+                          {format(parseISO(rendicion.createdAt), 'dd')}
+                        </span>
+                        <span className="text-[9px] font-medium text-gray-500">
+                          {format(parseISO(rendicion.createdAt), 'yyyy')}
+                        </span>
+                      </div>
+
+                      {/* Info Column */}
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-bold text-gray-900 truncate text-sm sm:text-base">
+                          {rendicion.name}
+                        </h3>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
+                          <span className="inline-flex items-center">
+                            <Calendar className="w-3.5 h-3.5 mr-1 text-gray-400" />
+                            {createdDateFormatted}
+                          </span>
+                          <span className="inline-flex items-center">
+                            <Coins className="w-3.5 h-3.5 mr-1 text-gray-400" />
+                            {rendicion.comprobantes.length} comprobantes
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions and Status Column */}
+                    <div className="flex items-center space-x-4 shrink-0">
+                      {/* Status badge */}
+                      <div className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wide shrink-0 ${getStatusClass(rendicion.status)}`}>
+                        {getStatusIcon(rendicion.status)}
+                        <span className="ml-1 sm:inline hidden">{rendicion.status}</span>
+                      </div>
+
+                      {/* Expand / Collapse trigger */}
+                      <div className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                        {isExpanded ? (
+                          <ChevronUp className="w-5 h-5" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5" />
+                        )}
+                      </div>
+                    </div>
                   </div>
+
+                  {/* Expanded Card Details (Conditionally rendered) */}
+                  {isExpanded && (
+                    <div className="px-4 pb-5 sm:px-5 sm:pb-6 border-t border-gray-100 bg-white/50 animate-fade-in">
+                      <div className="pt-5 grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Summary panel */}
+                        <div className="md:col-span-2 space-y-4">
+                          <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                            Resumen Financiero del Bloque
+                          </h4>
+                          
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            <div className="p-3 bg-gray-50 border border-gray-200/50 rounded-xl">
+                              <span className="block text-xs text-gray-500">Monto Recibido</span>
+                              <span className="text-base font-extrabold text-gray-900 mt-1 block">
+                                S/ {advance.toFixed(2)}
+                              </span>
+                            </div>
+                            
+                            <div className="p-3 bg-gray-50 border border-gray-200/50 rounded-xl">
+                              <span className="block text-xs text-gray-500">Gastado Total</span>
+                              <span className="text-base font-extrabold text-gray-900 mt-1 block">
+                                S/ {rendicion.totalAmount.toFixed(2)}
+                              </span>
+                            </div>
+
+                            <div className="p-3 bg-gray-50 border border-gray-200/50 rounded-xl col-span-2 sm:col-span-1">
+                              <span className="block text-xs text-gray-500">
+                                {balance > 0 ? 'Por Devolver' : balance < 0 ? 'Por Reembolsar' : 'Saldo Conciliado'}
+                              </span>
+                              <span className={`text-base font-extrabold mt-1 block ${balance > 0 ? 'text-amber-600' : balance < 0 ? 'text-blue-600' : 'text-green-600'}`}>
+                                S/ {Math.abs(balance).toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Extra block details */}
+                          <div className="text-xs space-y-2 border-t border-gray-100 pt-3 text-gray-500">
+                            {rendicion.advanceDate && (
+                              <div className="flex justify-between max-w-md">
+                                <span>Fecha Desembolso de Adelanto:</span>
+                                <span className="font-semibold text-gray-700">
+                                  {format(new Date(rendicion.advanceDate + 'T00:00:00'), 'dd/MM/yyyy')}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex justify-between max-w-md">
+                              <span>Fecha de Registro de Rendición:</span>
+                              <span className="font-semibold text-gray-700">
+                                {format(parseISO(rendicion.createdAt), 'dd/MM/yyyy hh:mm a')}
+                              </span>
+                            </div>
+                            <div className="flex justify-between max-w-md">
+                              <span>Comprobantes Reportados:</span>
+                              <span className="font-semibold text-gray-700">
+                                {rendicion.comprobantes.length} documentos cargados
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Fast Actions panel */}
+                        <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex flex-col justify-between space-y-4">
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                              Acciones del Bloque
+                            </h4>
+                            <p className="text-xs text-gray-500">
+                              Puedes descargar el informe oficial firmado o editar los comprobantes registrados.
+                            </p>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            {/* Edit Button */}
+                            <Link
+                              to={`/edit/${rendicion.id}`}
+                              className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer gap-2"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              Editar / Agregar Comprobantes
+                            </Link>
+
+                            {/* Download PDF Button */}
+                            <button
+                              onClick={() => exportSingleRendicionPDF(rendicion, settings)}
+                              className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-blue-600" />
+                              Descargar Reporte (PDF)
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-              
-              <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-between items-center mt-auto">
-                <span className="text-xs text-gray-500 font-medium">{format(parseISO(rendicion.createdAt), 'dd MMM yyyy', { locale: es })}</span>
-                <Link to={`/edit/${rendicion.id}`} className="text-xs font-semibold text-blue-600 hover:underline">
-                  Editar / Agregar Gastos
-                </Link>
-              </div>
-            </div>
-          )})
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

@@ -14,6 +14,7 @@ import { FormRendicion } from './components/FormRendicion';
 import { DashboardAdmin } from './components/DashboardAdmin';
 import { Settings } from './components/Settings';
 import { Welcome } from './components/Welcome';
+import { UsersManager } from './components/UsersManager';
 import { useAppStore } from './lib/store';
 import { Rendicion } from './types';
 
@@ -125,6 +126,7 @@ export default function App() {
         {currentUser.role === 'admin' ? (
           <>
             <Route path="/admin" element={<DashboardAdmin />} />
+            <Route path="/users" element={<UsersManager />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </>

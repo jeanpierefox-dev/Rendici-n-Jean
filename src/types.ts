@@ -53,4 +53,6 @@ export interface User {
   role: 'user' | 'admin';
   email?: string;
   department?: string;
+  password?: string;
+  createdAt?: string;
 }
