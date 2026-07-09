@@ -85,6 +85,7 @@ export const exportToExcel = (rendiciones: Rendicion[], settings: AppSettings) =
     'Tipo Documento': c.type,
     'Número Documento': c.documentNumber,
     'RUC': c.ruc,
+    'Razón Social': c.razonSocial || '',
     'Categoría': c.category || 'Otros',
     'Observación': c.observation || '',
     'Fecha Documento': formatLocalDate(c.date),
@@ -105,6 +106,7 @@ export const exportToExcel = (rendiciones: Rendicion[], settings: AppSettings) =
     {wch: 15}, // Tipo
     {wch: 20}, // Num
     {wch: 15}, // RUC
+    {wch: 25}, // Razón Social
     {wch: 18}, // Categoría
     {wch: 25}, // Observación
     {wch: 15}, // Fecha
@@ -335,7 +337,7 @@ export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSett
     formatLocalDate(c.date),
     c.type,
     c.documentNumber,
-    c.ruc,
+    c.razonSocial ? `${c.ruc}\n${c.razonSocial}` : c.ruc,
     c.observation ? `${c.category || 'Otros'} (${c.observation})` : (c.category || 'Otros'),
     `S/ ${c.amount.toFixed(2)}`
   ]);
@@ -348,12 +350,12 @@ export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSett
     styles: { font: 'helvetica', fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
     columnStyles: {
-      0: { cellWidth: 22 },
+      0: { cellWidth: 20 },
       1: { cellWidth: 15 },
-      2: { cellWidth: 28 },
-      3: { cellWidth: 25 },
+      2: { cellWidth: 25 },
+      3: { cellWidth: 35 },
       4: { cellWidth: 'auto' },
-      5: { cellWidth: 25, halign: 'right', fontStyle: 'bold' }
+      5: { cellWidth: 20, halign: 'right', fontStyle: 'bold' }
     }
   });
 

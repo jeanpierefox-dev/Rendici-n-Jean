@@ -256,7 +256,10 @@ export function DashboardAdmin() {
                                   <tr key={i}>
                                     <td className="py-2 text-gray-600">{formatLocalDate(c.date)}</td>
                                     <td className="py-2 text-gray-900 font-medium">{c.type} {c.documentNumber}</td>
-                                    <td className="py-2 text-gray-600">{c.ruc}</td>
+                                    <td className="py-2 text-gray-600">
+                                      <div className="font-semibold">{c.ruc}</div>
+                                      {c.razonSocial && <div className="text-[11px] text-slate-500 font-medium truncate max-w-[150px]" title={c.razonSocial}>{c.razonSocial}</div>}
+                                    </td>
                                     <td className="py-2 text-gray-700">
                                       <span className="font-semibold text-slate-800">{c.category || 'Otros'}</span>
                                       {c.observation && <span className="block text-xs text-gray-400 mt-0.5 max-w-[200px] truncate" title={c.observation}>{c.observation}</span>}

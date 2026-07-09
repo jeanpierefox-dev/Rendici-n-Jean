@@ -6,6 +6,7 @@ export interface Comprobante {
   type: DocType;
   documentNumber: string;
   ruc: string;
+  razonSocial?: string;
   date: string; // ISO string
   amount: number;
   receiptPhoto?: string; // base64

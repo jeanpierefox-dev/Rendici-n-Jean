@@ -35,6 +35,45 @@ export function FormRendicion() {
   const [observation, setObservation] = useState('');
   const [showDocForm, setShowDocForm] = useState(true);
 
+  const [razonSocial, setRazonSocial] = useState('');
+  const [loadingRuc, setLoadingRuc] = useState(false);
+  const [rucError, setRucError] = useState('');
+
+  const fetchRucInfo = async (rucVal: string) => {
+    if (!rucVal || rucVal.length !== 11) return;
+    setLoadingRuc(true);
+    setRucError('');
+    try {
+      const res = await fetch(`/api/ruc/${rucVal}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.razonSocial) {
+          setRazonSocial(data.razonSocial);
+        } else {
+          setRucError('No se encontró la Razón Social');
+        }
+      } else {
+        setRucError('Error al conectar con SUNAT');
+      }
+    } catch (err) {
+      console.error(err);
+      setRucError('Error al conectar con el servidor');
+    } finally {
+      setLoadingRuc(false);
+    }
+  };
+
+  const handleRucChange = (val: string) => {
+    const cleanVal = val.replace(/[^0-9]/g, '');
+    setRuc(cleanVal);
+    if (cleanVal.length === 11) {
+      fetchRucInfo(cleanVal);
+    } else {
+      setRazonSocial('');
+      setRucError('');
+    }
+  };
+
   // Ingreso Form state
   const [editingIngresoId, setEditingIngresoId] = useState<string | null>(null);
   const [ingAmount, setIngAmount] = useState('');
@@ -130,6 +169,8 @@ export function FormRendicion() {
     setType(comp.type);
     setDocumentNumber(comp.documentNumber);
     setRuc(comp.ruc);
+    setRazonSocial(comp.razonSocial || '');
+    setRucError('');
     // Format date string safely for input element
     const formattedDate = comp.date.includes('T') ? comp.date.split('T')[0] : comp.date;
     setDate(formattedDate);
@@ -145,6 +186,8 @@ export function FormRendicion() {
     setType('Factura');
     setDocumentNumber('');
     setRuc('');
+    setRazonSocial('');
+    setRucError('');
     setDate('');
     setAmount('');
     setReceiptPhoto(undefined);
@@ -167,6 +210,7 @@ export function FormRendicion() {
             type,
             documentNumber,
             ruc,
+            razonSocial,
             date,
             amount: parseFloat(amount),
             receiptPhoto,
@@ -183,6 +227,7 @@ export function FormRendicion() {
         type,
         documentNumber,
         ruc,
+        razonSocial,
         date,
         amount: parseFloat(amount),
         receiptPhoto,
@@ -199,6 +244,8 @@ export function FormRendicion() {
     setType('Factura');
     setDocumentNumber('');
     setRuc('');
+    setRazonSocial('');
+    setRucError('');
     setDate('');
     setAmount('');
     setReceiptPhoto(undefined);
@@ -628,7 +675,10 @@ export function FormRendicion() {
                   <tr key={c.id || i} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3 text-gray-700">{formatLocalDate(c.date)}</td>
                     <td className="px-5 py-3 font-medium text-gray-900">{c.type} {c.documentNumber}</td>
-                    <td className="px-5 py-3 text-gray-500">{c.ruc}</td>
+                    <td className="px-5 py-3 text-gray-500">
+                      <div className="font-semibold text-gray-700">{c.ruc}</div>
+                      {c.razonSocial && <div className="text-xs text-slate-500 truncate max-w-[180px] font-medium" title={c.razonSocial}>{c.razonSocial}</div>}
+                    </td>
                     <td className="px-5 py-3 text-gray-700">
                       <span className="font-semibold text-slate-800">{c.category || 'Otros'}</span>
                       {c.observation && <span className="block text-xs text-gray-400 mt-0.5 max-w-[200px] truncate" title={c.observation}>{c.observation}</span>}
@@ -696,14 +746,39 @@ export function FormRendicion() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">RUC Emisor (11 dígitos)</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1 flex justify-between items-center">
+                  <span>RUC Emisor (11 dígitos)</span>
+                  {loadingRuc && <span className="text-[10px] text-blue-600 animate-pulse font-medium">Buscando...</span>}
+                  {rucError && <span className="text-[10px] text-red-500 font-medium">{rucError}</span>}
+                </label>
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    maxLength={11} 
+                    value={ruc} 
+                    onChange={(e) => handleRucChange(e.target.value)} 
+                    placeholder="Ej. 20123456789"
+                    className="w-full pl-3 pr-16 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" 
+                    required 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fetchRucInfo(ruc)}
+                    disabled={ruc.length !== 11 || loadingRuc}
+                    className="absolute right-1.5 top-1.5 bottom-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 border border-slate-300 rounded text-[10px] font-bold transition-colors cursor-pointer"
+                  >
+                    Buscar
+                  </button>
+                </div>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Razón Social (Nombre de la Empresa)</label>
                 <input 
                   type="text" 
-                  maxLength={11} 
-                  value={ruc} 
-                  onChange={(e) => setRuc(e.target.value.replace(/[^0-9]/g, ''))} 
-                  placeholder="Ej. 20123456789"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                  value={razonSocial} 
+                  onChange={(e) => setRazonSocial(e.target.value)} 
+                  placeholder="Razón social autocompletada por SUNAT o ingresada manualmente"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium" 
                   required 
                 />
               </div>
