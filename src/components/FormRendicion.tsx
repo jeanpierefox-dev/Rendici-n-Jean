@@ -117,16 +117,14 @@ export function FormRendicion() {
             setRucError(''); // Success!
             return;
           } else {
-            const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
-            setRazonSocial(fallbackName);
-            setRucError('⚠️ SUNAT no responde. Puedes ingresar el nombre manualmente.');
+            setRucError('⚠️ Abre la app en Nueva Pestaña (botón arriba derecha) para búsqueda SUNAT en tiempo real. Por favor escribe el nombre manualmente.');
             return;
           }
         }
         
         try {
           const data = JSON.parse(text);
-          if (data && data.razonSocial) {
+          if (data && data.razonSocial && data.source !== "offline-sunat-generator" && data.source !== "offline-sunat-generator-invalid-length") {
             setRazonSocial(data.razonSocial);
             setRucError(''); // Clear error on complete success
           } else {
@@ -136,9 +134,7 @@ export function FormRendicion() {
               setRazonSocial(proxyName);
               setRucError('');
             } else {
-              const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
-              setRazonSocial(fallbackName);
-              setRucError(emisorDocType === 'DNI' ? 'No se encontró el DNI. Puedes ingresar el nombre manualmente.' : 'No se encontró el RUC. Puedes ingresar el nombre manualmente.');
+              setRucError(emisorDocType === 'DNI' ? '⚠️ DNI no encontrado en SUNAT. Escríbelo manualmente.' : '⚠️ RUC no encontrado en SUNAT. Escríbelo manualmente.');
             }
           }
         } catch (jsonErr) {
@@ -147,9 +143,7 @@ export function FormRendicion() {
             setRazonSocial(proxyName);
             setRucError('');
           } else {
-            const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
-            setRazonSocial(fallbackName);
-            setRucError('⚠️ SUNAT no responde. Puedes ingresar el nombre manualmente.');
+            setRucError('⚠️ SUNAT no responde. Por favor escribe el nombre de la empresa de forma manual.');
           }
         }
       } else {
@@ -159,9 +153,7 @@ export function FormRendicion() {
           setRazonSocial(proxyName);
           setRucError('');
         } else {
-          const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
-          setRazonSocial(fallbackName);
-          setRucError('⚠️ SUNAT no responde. Puedes ingresar el nombre manualmente.');
+          setRucError('⚠️ SUNAT no responde. Por favor escribe el nombre de la empresa de forma manual.');
         }
       }
     } catch (err) {
@@ -172,9 +164,7 @@ export function FormRendicion() {
         setRazonSocial(proxyName);
         setRucError('');
       } else {
-        const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
-        setRazonSocial(fallbackName);
-        setRucError('⚠️ SUNAT no responde. Puedes ingresar el nombre manualmente.');
+        setRucError('⚠️ SUNAT no responde. Por favor escribe el nombre de la empresa de forma manual.');
       }
     } finally {
       setLoadingRuc(false);
@@ -990,6 +980,7 @@ export function FormRendicion() {
                   <option value="Alimentación (Almuerzo)">Alimentación (Almuerzo)</option>
                   <option value="Alimentación (Cena)">Alimentación (Cena)</option>
                   <option value="Bebidas">Bebidas</option>
+                  <option value="Hospedaje">Hospedaje</option>
                   <option value="Gasolina">Gasolina</option>
                   <option value="Otros">Otros (especificar)</option>
                 </select>
@@ -1007,6 +998,24 @@ export function FormRendicion() {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
                   required={category === 'Otros'}
                 />
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  <span className="text-[10px] text-gray-500 self-center mr-1">Rápidos:</span>
+                  {['Hospedaje', 'Taxi', 'Peaje', 'Almuerzo', 'Desayuno', 'Cena', 'Gasolina'].map((sug) => (
+                    <button
+                      key={sug}
+                      type="button"
+                      onClick={() => {
+                        setObservation(sug);
+                        if (sug === 'Hospedaje') {
+                          setCategory('Hospedaje');
+                        }
+                      }}
+                      className="px-2 py-0.5 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded transition-colors cursor-pointer"
+                    >
+                      {sug}
+                    </button>
+                  ))}
+                </div>
               </div>
               
               <div className="sm:col-span-2 md:col-span-3">
