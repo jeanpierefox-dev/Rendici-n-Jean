@@ -22,54 +22,61 @@ export default function App() {
   const { currentUser, hasEnteredApp, setCurrentUser } = useAppStore();
   const [user, loading] = useAuthState(auth);
 
-  // 1. Effect to load and sync user profile
+  // 1. Sync Google User profile when Google Auth state changes
   useEffect(() => {
-    if (user) {
-      const userRef = doc(db, 'users', user.uid);
-      getDoc(userRef).then((docSnap) => {
-        if (docSnap.exists()) {
-          setCurrentUser(docSnap.data() as any);
+    if (!user) return;
+    
+    const userRef = doc(db, 'users', user.uid);
+    getDoc(userRef).then((docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (!currentUser || currentUser.id !== user.uid || currentUser.role !== data.role || currentUser.name !== data.name) {
+          setCurrentUser(data as any);
           useAppStore.setState({ hasEnteredApp: true });
-        } else {
-          // Safe fallback: Auto-create Firestore document if it does not exist yet
-          const role: 'user' | 'admin' = user.email?.includes('admin') ? 'admin' : 'user';
-          const userDoc = {
-            id: user.uid,
-            name: user.displayName || user.email?.split('@')[0] || 'Usuario',
-            email: user.email || '',
-            role: role,
-            department: 'General'
-          };
-          setDoc(userRef, userDoc, { merge: true }).then(() => {
-            setCurrentUser(userDoc);
-            useAppStore.setState({ hasEnteredApp: true });
-          }).catch((err) => {
-            console.error("Error creating user profile in Firestore:", err);
-            setCurrentUser(userDoc);
-            useAppStore.setState({ hasEnteredApp: true });
-          });
         }
-      }).catch((err) => {
-        console.error("Error loading user profile:", err);
-        // Fallback to local state if Firestore query fails so the user can still use the app
+      } else {
+        // Safe fallback: Auto-create Firestore document if it does not exist yet
         const role: 'user' | 'admin' = user.email?.includes('admin') ? 'admin' : 'user';
-        setCurrentUser({
+        const userDoc = {
           id: user.uid,
           name: user.displayName || user.email?.split('@')[0] || 'Usuario',
           email: user.email || '',
           role: role,
           department: 'General'
+        };
+        setDoc(userRef, userDoc, { merge: true }).then(() => {
+          setCurrentUser(userDoc);
+          useAppStore.setState({ hasEnteredApp: true });
+        }).catch((err) => {
+          console.error("Error creating user profile in Firestore:", err);
+          setCurrentUser(userDoc);
+          useAppStore.setState({ hasEnteredApp: true });
         });
-        useAppStore.setState({ hasEnteredApp: true });
-      });
-    } else {
-      // If there's no active Google user session, but we have a custom user logged in (with id prefix user_ or local_),
-      // we keep the app active and do not reset hasEnteredApp.
+      }
+    }).catch((err) => {
+      console.error("Error loading user profile:", err);
+      // Fallback to local state if Firestore query fails so the user can still use the app
+      const role: 'user' | 'admin' = user.email?.includes('admin') ? 'admin' : 'user';
+      const fallbackUser = {
+        id: user.uid,
+        name: user.displayName || user.email?.split('@')[0] || 'Usuario',
+        email: user.email || '',
+        role: role,
+        department: 'General'
+      };
+      setCurrentUser(fallbackUser);
+      useAppStore.setState({ hasEnteredApp: true });
+    });
+  }, [user?.uid]);
+
+  // 1b. Custom Login session gate (checks if user is NOT logged in with either Google or custom credential)
+  useEffect(() => {
+    if (!user) {
       if (!currentUser || (currentUser.id && !currentUser.id.startsWith('user_') && !currentUser.id.startsWith('local_'))) {
         useAppStore.setState({ hasEnteredApp: false });
       }
     }
-  }, [user, currentUser]);
+  }, [user, currentUser?.id]);
 
   // 2. Effect to subscribe to rendiciones safely
   useEffect(() => {

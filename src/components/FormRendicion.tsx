@@ -538,6 +538,15 @@ export function FormRendicion() {
     );
   }
 
+  if (isEditing && !isLoaded) {
+    return (
+      <div className="min-h-[400px] flex flex-col items-center justify-center bg-white border border-gray-200 rounded-xl p-8 shadow-sm">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-3" />
+        <p className="text-gray-500 text-sm font-medium">Cargando datos de la rendición...</p>
+      </div>
+    );
+  }
+
   // Calculation of aggregates
   const totalGastado = comprobantes.reduce((sum, c) => sum + c.amount, 0);
   const totalIngresos = ingresos.reduce((sum, ing) => sum + ing.amount, 0);
