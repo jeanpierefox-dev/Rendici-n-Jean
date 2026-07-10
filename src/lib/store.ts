@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { Rendicion, AppSettings, AppNotification, User, Comprobante } from '../types';
 import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import { safeUUID } from './utils';
 
 // Initial Mock Data
 const MOCK_USERS: User[] = [
@@ -47,7 +48,7 @@ export const useAppStore = create<AppState>()(
       addRendicion: async (name, advanceAmount, comprobantes, signature, advanceDate, ingresos) => {
         const { currentUser } = get();
         const totalAmount = comprobantes.reduce((sum, c) => sum + c.amount, 0);
-        const newId = crypto.randomUUID();
+        const newId = safeUUID();
         
         const newRendicion: any = {
           id: newId,
@@ -56,7 +57,7 @@ export const useAppStore = create<AppState>()(
           createdAt: new Date().toISOString(),
           userId: currentUser.id,
           userName: currentUser.name,
-          comprobantes: comprobantes.map(c => ({ ...c, id: crypto.randomUUID() })),
+          comprobantes: comprobantes.map(c => ({ ...c, id: safeUUID() })),
           totalAmount,
           advanceAmount,
         };
@@ -66,6 +67,12 @@ export const useAppStore = create<AppState>()(
         if (ingresos !== undefined) newRendicion.ingresos = ingresos;
         
         await setDoc(doc(db, 'rendiciones', newId), newRendicion);
+        
+        // Optimistic / Local update
+        set((state) => ({
+          rendiciones: [newRendicion, ...state.rendiciones]
+        }));
+
         get().addNotification('admin1', 'Nueva Rendición', `${currentUser.name} ha enviado el bloque "${name}" por S/ ${totalAmount.toFixed(2)}.`);
       },
 
@@ -84,6 +91,11 @@ export const useAppStore = create<AppState>()(
         }
         
         await updateDoc(rendicionRef, updateData);
+
+        // Optimistic / Local update
+        set((state) => ({
+          rendiciones: state.rendiciones.map(r => r.id === id ? { ...r, ...updateData } : r)
+        }));
       },
 
       updateRendicionStatus: async (id, newStatus) => {
@@ -91,6 +103,12 @@ export const useAppStore = create<AppState>()(
         const r = rendiciones.find(r => r.id === id);
         if (r) {
           await updateDoc(doc(db, 'rendiciones', id), { status: newStatus });
+          
+          // Optimistic / Local update
+          set((state) => ({
+            rendiciones: state.rendiciones.map(item => item.id === id ? { ...item, status: newStatus } : item)
+          }));
+
           get().addNotification(r.userId, 'Estado Actualizado', `Tu rendición "${r.name}" de S/ ${r.totalAmount.toFixed(2)} ha sido ${newStatus.toLowerCase()}.`);
           
           if ('Notification' in window && Notification.permission === 'granted') {
@@ -104,6 +122,10 @@ export const useAppStore = create<AppState>()(
 
       deleteRendicion: async (id) => {
         await deleteDoc(doc(db, 'rendiciones', id));
+        // Optimistic / Local update
+        set((state) => ({
+          rendiciones: state.rendiciones.filter(r => r.id !== id)
+        }));
       },
 
       updateSettings: (newSettings) => {
@@ -114,7 +136,7 @@ export const useAppStore = create<AppState>()(
 
       addNotification: (userId, title, message) => {
         const newNotification: AppNotification = {
-          id: crypto.randomUUID(),
+          id: safeUUID(),
           userId,
           title,
           message,

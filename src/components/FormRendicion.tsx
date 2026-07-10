@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../lib/store';
 import { useNavigate, useParams } from 'react-router';
-import { fileToBase64, compressImageToBase64, formatLocalDate } from '../lib/utils';
+import { fileToBase64, compressImageToBase64, formatLocalDate, safeUUID } from '../lib/utils';
 import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2, Edit3, DollarSign, Calendar, Tag } from 'lucide-react';
 import { Comprobante, DocType, Rendicion, Ingreso } from '../types';
 import { format } from 'date-fns';
@@ -332,7 +332,7 @@ export function FormRendicion() {
     } else {
       // Creation mode
       const newDoc: Comprobante = {
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         type,
         documentNumber,
         ruc,
@@ -370,7 +370,7 @@ export function FormRendicion() {
       // Seamlessly transition from /new to /edit/:id on first document addition
       setSaveStatus('saving');
       try {
-        const newId = crypto.randomUUID();
+        const newId = safeUUID();
         const blockName = name.trim() || 'Rendición Temporal';
         const sumIngresos = ingresos.reduce((sum, ing) => sum + ing.amount, 0);
         const primaryDate = ingresos.length > 0 ? ingresos[0].date : (new Date().toISOString().split('T')[0]);
@@ -394,6 +394,12 @@ export function FormRendicion() {
         };
         
         await setDoc(doc(db, 'rendiciones', newId), newRendicion);
+        
+        // Update local state instantly so that on navigate the state is loaded without wait
+        useAppStore.setState((state) => ({
+          rendiciones: [newRendicion, ...state.rendiciones]
+        }));
+
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
         
@@ -456,7 +462,7 @@ export function FormRendicion() {
     } else {
       // Creating a new ingreso
       const newIng: Ingreso = {
-        id: crypto.randomUUID(),
+        id: safeUUID(),
         amount: parseFloat(ingAmount),
         date: ingDate,
         reference: ingReference.trim() || undefined
