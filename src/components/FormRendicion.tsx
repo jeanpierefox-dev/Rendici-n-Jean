@@ -271,7 +271,7 @@ export function FormRendicion() {
       };
       
       let payloadSize = JSON.stringify(payload).length;
-      if (payloadSize > 800000) {
+      if (payloadSize > 950000) {
         const shrunkenComprobantes = await Promise.all(
           payload.comprobantes.map(async (c: Comprobante) => {
             if (c.receiptPhoto && c.receiptPhoto.length > 50000) {
@@ -563,7 +563,7 @@ export function FormRendicion() {
       };
       
       let payloadSize = JSON.stringify(payload).length;
-      if (payloadSize > 800000) {
+      if (payloadSize > 950000) {
         const shrunkenComprobantes = await Promise.all(
           payload.comprobantes.map(async (c: Comprobante) => {
             if (c.receiptPhoto && c.receiptPhoto.length > 50000) {
