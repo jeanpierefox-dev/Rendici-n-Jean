@@ -225,8 +225,19 @@ export function FormRendicion() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (!file.type.startsWith('image/') && file.size > 300 * 1024) {
+        alert('Por límite de sistema, los archivos PDF no deben superar los 300KB. Por favor, comprima el archivo o tome una foto.');
+        return;
+      }
       try {
-        const base64 = await compressImageToBase64(file, 800, 800, 0.6); // Compress to max 800px width/height and 0.6 quality (highly efficient)
+        const base64 = await compressImageToBase64(file, 800, 800, 0.4); 
+        
+        const sizeInBytes = base64.length * 0.75;
+        if (sizeInBytes > 200 * 1024) {
+          alert('El archivo adjunto es muy pesado (máx 200KB comprimido). Intente con una foto de menor resolución.');
+          return;
+        }
+        
         setReceiptPhoto(base64);
       } catch (err) {
         console.error('Error reading file', err);
@@ -1100,7 +1111,12 @@ export function FormRendicion() {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (file) {
-                const base64 = await compressImageToBase64(file, 600, 600, 0.6); // Compress signature to be lightweight
+                const base64 = await compressImageToBase64(file, 600, 600, 0.4); // Compress signature to be lightweight
+                const sizeInBytes = base64.length * 0.75;
+                if (sizeInBytes > 300 * 1024) {
+                  alert('La imagen de firma es muy pesada. Intente con otra de menor resolución.');
+                  return;
+                }
                 setSignature(base64);
                 if (isEditing && id) {
                   await autoSaveBlock(comprobantes, ingresos, base64);

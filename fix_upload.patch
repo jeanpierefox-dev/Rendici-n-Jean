@@ -1,0 +1,22 @@
+--- src/components/FormRendicion.tsx
++++ src/components/FormRendicion.tsx
+@@ -226,7 +226,19 @@
+     const file = e.target.files?.[0];
+     if (file) {
++      if (!file.type.startsWith('image/') && file.size > 300 * 1024) {
++        alert('Por límite de almacenamiento, los archivos PDF/documentos no deben superar los 300KB. Por favor, comprima el archivo o use una imagen (foto).');
++        return;
++      }
+       try {
+-        const base64 = await compressImageToBase64(file, 800, 800, 0.6); // Compress to max 800px width/height and 0.6 quality (highly efficient)
++        const base64 = await compressImageToBase64(file, 800, 800, 0.5); 
++        
++        // Calculate approximate size in bytes of the base64 string
++        const sizeInBytes = base64.length * 0.75;
++        if (sizeInBytes > 600 * 1024) {
++          alert('La imagen procesada es muy pesada. Por favor intente con otra foto de menor tamaño.');
++          return;
++        }
++        
+         setReceiptPhoto(base64);
+       } catch (err) {
