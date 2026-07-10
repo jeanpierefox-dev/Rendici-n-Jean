@@ -225,16 +225,16 @@ export function FormRendicion() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith('image/') && file.size > 300 * 1024) {
-        alert('Por límite de sistema, los archivos PDF no deben superar los 300KB. Por favor, comprima el archivo o tome una foto.');
+      if (!file.type.startsWith('image/') && file.size > 800 * 1024) {
+        alert('Por límite de sistema, los archivos PDF no deben superar los 800KB. Por favor, comprima el archivo o tome una foto.');
         return;
       }
       try {
-        const base64 = await compressImageToBase64(file, 1000, 1000, 0.65); 
+        const base64 = await compressImageToBase64(file, 1600, 1600, 0.85); 
         
         const sizeInBytes = base64.length * 0.75;
-        if (sizeInBytes > 350 * 1024) {
-          alert('El archivo adjunto es muy pesado (máx 350KB comprimido). Intente con una foto de menor resolución.');
+        if (sizeInBytes > 800 * 1024) {
+          alert('El archivo adjunto es muy pesado (máx 800KB comprimido). Intente con una foto de menor resolución.');
           return;
         }
         
@@ -276,7 +276,7 @@ export function FormRendicion() {
           payload.comprobantes.map(async (c: Comprobante) => {
             if (c.receiptPhoto && c.receiptPhoto.length > 50000) {
               try {
-                const newBase64 = await recompressBase64Image(c.receiptPhoto, 800, 800, 0.5);
+                const newBase64 = await recompressBase64Image(c.receiptPhoto, 1200, 1200, 0.65);
                 return { ...c, receiptPhoto: newBase64 };
               } catch (e) {
                 return c;
@@ -568,7 +568,7 @@ export function FormRendicion() {
           payload.comprobantes.map(async (c: Comprobante) => {
             if (c.receiptPhoto && c.receiptPhoto.length > 50000) {
               try {
-                const newBase64 = await recompressBase64Image(c.receiptPhoto, 800, 800, 0.5);
+                const newBase64 = await recompressBase64Image(c.receiptPhoto, 1200, 1200, 0.65);
                 return { ...c, receiptPhoto: newBase64 };
               } catch (e) {
                 return c;
