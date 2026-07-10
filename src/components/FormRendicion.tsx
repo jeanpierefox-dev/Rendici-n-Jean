@@ -75,17 +75,53 @@ export function FormRendicion() {
     if (!rucVal || (rucVal.length !== 11 && rucVal.length !== 8)) return;
     setLoadingRuc(true);
     setRucError('');
+
+    // Helper to query apis.net.pe through allorigins CORS proxy if the standard endpoint fails/redirects
+    const fetchViaCorsProxy = async (): Promise<string | null> => {
+      try {
+        const isDni = emisorDocType === 'DNI';
+        const targetUrl = isDni 
+          ? `https://api.apis.net.pe/v1/dni?numero=${rucVal}`
+          : `https://api.apis.net.pe/v1/ruc?numero=${rucVal}`;
+        
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+        const corsRes = await fetch(proxyUrl);
+        if (corsRes.ok) {
+          const wrapper = await corsRes.json();
+          if (wrapper && wrapper.contents) {
+            const innerData = JSON.parse(wrapper.contents);
+            if (innerData && (innerData.nombre || innerData.razonSocial)) {
+              return innerData.nombre || innerData.razonSocial;
+            }
+          }
+        }
+      } catch (proxyErr) {
+        console.error('Error in CORS proxy fetch:', proxyErr);
+      }
+      return null;
+    };
+
     try {
+      // 1. Try fetching via our server API route
       const res = await fetch(`/api/ruc/${rucVal}?type=${emisorDocType}`);
+      
       if (res.ok) {
         const text = await res.text();
         
         // If the platform gateway redirected to cookie check page (HTML response in sandboxed iframe)
         if (text.trim().startsWith('<')) {
-          const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
-          setRazonSocial(fallbackName);
-          setRucError('⚠️ Abre la app en una Nueva Pestaña (botón arriba a la derecha) para activar consulta real.');
-          return;
+          console.log('Iframe sandbox redirect detected. Falling back to CORS proxy...');
+          const proxyName = await fetchViaCorsProxy();
+          if (proxyName) {
+            setRazonSocial(proxyName);
+            setRucError(''); // Success!
+            return;
+          } else {
+            const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
+            setRazonSocial(fallbackName);
+            setRucError('⚠️ SUNAT no responde. Puedes ingresar el nombre manualmente.');
+            return;
+          }
         }
         
         try {
@@ -94,27 +130,52 @@ export function FormRendicion() {
             setRazonSocial(data.razonSocial);
             setRucError(''); // Clear error on complete success
           } else {
-            const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
-            setRazonSocial(fallbackName);
-            setRucError(emisorDocType === 'DNI' ? 'No se encontró el DNI, usando provisional' : 'No se encontró la Razón Social, usando provisional');
+            // Server didn't find it or had fallback. Let's try CORS proxy as a second chance before giving up
+            const proxyName = await fetchViaCorsProxy();
+            if (proxyName) {
+              setRazonSocial(proxyName);
+              setRucError('');
+            } else {
+              const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
+              setRazonSocial(fallbackName);
+              setRucError(emisorDocType === 'DNI' ? 'No se encontró el DNI. Puedes ingresar el nombre manualmente.' : 'No se encontró el RUC. Puedes ingresar el nombre manualmente.');
+            }
           }
         } catch (jsonErr) {
-          const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
-          setRazonSocial(fallbackName);
-          setRucError('⚠️ Abre la app en Nueva Pestaña para búsqueda real.');
+          const proxyName = await fetchViaCorsProxy();
+          if (proxyName) {
+            setRazonSocial(proxyName);
+            setRucError('');
+          } else {
+            const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
+            setRazonSocial(fallbackName);
+            setRucError('⚠️ SUNAT no responde. Puedes ingresar el nombre manualmente.');
+          }
         }
       } else {
-        // Handle server error status
-        const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
-        setRazonSocial(fallbackName);
-        setRucError('⚠️ Abre la app en Nueva Pestaña para búsqueda real.');
+        // Server returned non-ok status. Try CORS proxy
+        const proxyName = await fetchViaCorsProxy();
+        if (proxyName) {
+          setRazonSocial(proxyName);
+          setRucError('');
+        } else {
+          const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
+          setRazonSocial(fallbackName);
+          setRucError('⚠️ SUNAT no responde. Puedes ingresar el nombre manualmente.');
+        }
       }
     } catch (err) {
-      console.error(err);
-      // Client-side offline fallback
-      const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
-      setRazonSocial(fallbackName);
-      setRucError('⚠️ Abre la app en Nueva Pestaña para búsqueda real.');
+      console.error('Error fetching RUC info:', err);
+      // Main fetch failed (e.g. offline). Try CORS proxy
+      const proxyName = await fetchViaCorsProxy();
+      if (proxyName) {
+        setRazonSocial(proxyName);
+        setRucError('');
+      } else {
+        const fallbackName = getDeterministicFallback(rucVal, emisorDocType);
+        setRazonSocial(fallbackName);
+        setRucError('⚠️ SUNAT no responde. Puedes ingresar el nombre manualmente.');
+      }
     } finally {
       setLoadingRuc(false);
     }
