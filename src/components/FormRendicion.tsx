@@ -274,7 +274,9 @@ export function FormRendicion() {
       const payloadSize = JSON.stringify(payload).length;
       if (payloadSize > 900000) {
         setSaveStatus('error');
-        setErrorMessage('El bloque contiene demasiadas imágenes y excede el límite de espacio. Elimine algunas fotos o divídalo en bloques separados.');
+        const msg = 'El bloque contiene demasiadas imágenes y excede el límite de espacio. Elimine algunas fotos o divídalo en bloques separados.';
+        setErrorMessage(msg);
+        alert(msg);
         return;
       }
 
@@ -521,7 +523,10 @@ export function FormRendicion() {
 
   // --- SUBMIT FULL RENDICION BLOCK ---
   const handleSubmitBlock = async () => {
-    if (!name) return;
+    if (!name) {
+      alert('Por favor, ingresa un "Nombre del Bloque de Rendición" en la parte superior antes de guardar.');
+      return;
+    }
     setLoading(true);
     setErrorMessage('');
     
@@ -543,7 +548,9 @@ export function FormRendicion() {
       if (payloadSize > 900000) {
         setLoading(false);
         setSaveStatus('error');
-        setErrorMessage('El bloque contiene demasiadas imágenes y excede el límite de espacio de Google. Elimine algunas fotos o divídalo en bloques separados.');
+        const msg = 'El bloque contiene demasiadas imágenes y excede el límite de espacio (1MB). Por favor, elimine algunas fotos o divida en múltiples bloques de rendición.';
+        setErrorMessage(msg);
+        alert(msg);
         return;
       }
 
@@ -1166,8 +1173,14 @@ export function FormRendicion() {
           Cancelar
         </button>
         <button
-          onClick={handleSubmitBlock}
-          disabled={loading || !name}
+          onClick={(e) => {
+            if (!name) {
+              alert('Por favor, ingresa un "Nombre del Bloque de Rendición" en la parte superior antes de guardar.');
+              return;
+            }
+            handleSubmitBlock();
+          }}
+          disabled={loading}
           className="w-full sm:w-auto px-6 py-2.5 text-sm font-bold text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-md order-1 sm:order-2 text-center"
         >
           {loading ? 'Guardando...' : (isEditing ? 'Guardar Cambios' : 'Enviar Bloque de Rendición')}
