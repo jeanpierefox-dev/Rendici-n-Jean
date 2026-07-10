@@ -225,16 +225,17 @@ export function FormRendicion() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith('image/') && file.size > 300 * 1024) {
-        alert('Por límite de sistema, los archivos PDF no deben superar los 300KB. Por favor, comprima el archivo o tome una foto.');
+      if (!file.type.startsWith('image/') && file.size > 150 * 1024) {
+        alert('Por límite de sistema, los archivos PDF no deben superar los 150KB. Por favor, comprima el archivo o tome una foto.');
         return;
       }
       try {
-        const base64 = await compressImageToBase64(file, 800, 800, 0.4); 
+        // Compress more aggressively to fit multiple receipts in a single Firestore document (1MB limit)
+        const base64 = await compressImageToBase64(file, 600, 600, 0.35); 
         
         const sizeInBytes = base64.length * 0.75;
-        if (sizeInBytes > 200 * 1024) {
-          alert('El archivo adjunto es muy pesado (máx 200KB comprimido). Intente con una foto de menor resolución.');
+        if (sizeInBytes > 100 * 1024) {
+          alert('El archivo adjunto es muy pesado (máx 100KB comprimido). Intente con una foto de menor resolución.');
           return;
         }
         
@@ -261,14 +262,23 @@ export function FormRendicion() {
     const primaryDate = updatedIngresos.length > 0 ? updatedIngresos[0].date : (new Date().toISOString().split('T')[0]);
 
     try {
-      await updateRendicion(id, {
+      const payload = {
         name: name.trim() || 'Sin Nombre',
         advanceAmount: sumIngresos,
         advanceDate: primaryDate,
         comprobantes: updatedComprobantes,
         ingresos: updatedIngresos,
         signature: updatedSignature !== undefined ? updatedSignature : signature
-      });
+      };
+      
+      const payloadSize = JSON.stringify(payload).length;
+      if (payloadSize > 900000) {
+        setSaveStatus('error');
+        setErrorMessage('El bloque contiene demasiadas imágenes y excede el límite de espacio. Elimine algunas fotos o divídalo en bloques separados.');
+        return;
+      }
+
+      await updateRendicion(id, payload);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (err: any) {
@@ -519,16 +529,26 @@ export function FormRendicion() {
     const primaryDate = ingresos.length > 0 ? ingresos[0].date : (new Date().toISOString().split('T')[0]);
 
     try {
+      const payload = {
+        name,
+        advanceAmount: sumIngresos,
+        advanceDate: primaryDate,
+        comprobantes,
+        ingresos,
+        signature,
+        status: 'Pendiente' as const
+      };
+      
+      const payloadSize = JSON.stringify(payload).length;
+      if (payloadSize > 900000) {
+        setLoading(false);
+        setSaveStatus('error');
+        setErrorMessage('El bloque contiene demasiadas imágenes y excede el límite de espacio de Google. Elimine algunas fotos o divídalo en bloques separados.');
+        return;
+      }
+
       if (isEditing && id) {
-        await updateRendicion(id, {
-          name,
-          advanceAmount: sumIngresos,
-          advanceDate: primaryDate,
-          comprobantes,
-          ingresos,
-          signature,
-          status: 'Pendiente' // Enviar/guardar final siempre restablece el bloque a pendiente para que administración lo revise
-        });
+        await updateRendicion(id, payload);
       } else {
         await addRendicion(name, sumIngresos, comprobantes, signature, primaryDate, ingresos);
       }
@@ -1111,9 +1131,9 @@ export function FormRendicion() {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (file) {
-                const base64 = await compressImageToBase64(file, 600, 600, 0.4); // Compress signature to be lightweight
+                const base64 = await compressImageToBase64(file, 400, 400, 0.35); // Compress signature to be lightweight
                 const sizeInBytes = base64.length * 0.75;
-                if (sizeInBytes > 300 * 1024) {
+                if (sizeInBytes > 100 * 1024) {
                   alert('La imagen de firma es muy pesada. Intente con otra de menor resolución.');
                   return;
                 }
