@@ -22,6 +22,7 @@ export function FormRendicion() {
   const [signature, setSignature] = useState<string | undefined>();
   const [isLoaded, setIsLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Comprobante Form state
   const [editingComprobanteId, setEditingComprobanteId] = useState<string | null>(null);
@@ -241,6 +242,7 @@ export function FormRendicion() {
   ) => {
     if (!id || !isEditing) return;
     setSaveStatus('saving');
+    setErrorMessage('');
     
     // Sum of all ingresos is the main advanceAmount for backward compatibility with admins and statistics
     const sumIngresos = updatedIngresos.reduce((sum, ing) => sum + ing.amount, 0);
@@ -258,9 +260,10 @@ export function FormRendicion() {
       });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error auto-saving:', err);
       setSaveStatus('error');
+      setErrorMessage(err?.message || 'Error al guardar');
     }
   };
 
@@ -499,6 +502,7 @@ export function FormRendicion() {
   const handleSubmitBlock = async () => {
     if (!name) return;
     setLoading(true);
+    setErrorMessage('');
     
     const sumIngresos = ingresos.reduce((sum, ing) => sum + ing.amount, 0);
     const primaryDate = ingresos.length > 0 ? ingresos[0].date : (new Date().toISOString().split('T')[0]);
@@ -520,10 +524,11 @@ export function FormRendicion() {
       setLoading(false);
       setSuccess(true);
       setTimeout(() => navigate('/'), 1500);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
       setLoading(false);
       setSaveStatus('error');
+      setErrorMessage(error?.message || 'Error al guardar el bloque');
     }
   };
 
@@ -588,8 +593,8 @@ export function FormRendicion() {
           )}
           {saveStatus === 'error' && (
             <span className="inline-flex items-center text-red-600 bg-red-50 px-2.5 py-1.5 rounded-full border border-red-200">
-              <span className="w-2 h-2 rounded-full bg-red-500 mr-2"></span>
-              Error al guardar
+              <span className="w-2 h-2 rounded-full bg-red-500 mr-2 shrink-0"></span>
+              <span className="truncate max-w-[150px] sm:max-w-xs text-xs">{errorMessage || 'Error al guardar'}</span>
             </span>
           )}
           {saveStatus === 'idle' && isEditing && (

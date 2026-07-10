@@ -33,7 +33,7 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-export const compressImageToBase64 = (file: File, maxWidth = 1000, maxHeight = 1000, quality = 0.6): Promise<string> => {
+export const compressImageToBase64 = (file: File, maxWidth = 800, maxHeight = 800, quality = 0.5): Promise<string> => {
   return new Promise((resolve, reject) => {
     // Only compress images. If it's a PDF or another file type, fall back to standard fileToBase64
     if (!file.type.startsWith('image/')) {
