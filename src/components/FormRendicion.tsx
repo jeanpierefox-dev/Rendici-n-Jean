@@ -225,17 +225,16 @@ export function FormRendicion() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith('image/') && file.size > 150 * 1024) {
-        alert('Por límite de sistema, los archivos PDF no deben superar los 150KB. Por favor, comprima el archivo o tome una foto.');
+      if (!file.type.startsWith('image/') && file.size > 300 * 1024) {
+        alert('Por límite de sistema, los archivos PDF no deben superar los 300KB. Por favor, comprima el archivo o tome una foto.');
         return;
       }
       try {
-        // Compress more aggressively to fit multiple receipts in a single Firestore document (1MB limit)
-        const base64 = await compressImageToBase64(file, 600, 600, 0.35); 
+        const base64 = await compressImageToBase64(file, 1000, 1000, 0.65); 
         
         const sizeInBytes = base64.length * 0.75;
-        if (sizeInBytes > 100 * 1024) {
-          alert('El archivo adjunto es muy pesado (máx 100KB comprimido). Intente con una foto de menor resolución.');
+        if (sizeInBytes > 350 * 1024) {
+          alert('El archivo adjunto es muy pesado (máx 350KB comprimido). Intente con una foto de menor resolución.');
           return;
         }
         
@@ -275,9 +274,9 @@ export function FormRendicion() {
       if (payloadSize > 800000) {
         const shrunkenComprobantes = await Promise.all(
           payload.comprobantes.map(async (c: Comprobante) => {
-            if (c.receiptPhoto && c.receiptPhoto.length > 30000) {
+            if (c.receiptPhoto && c.receiptPhoto.length > 50000) {
               try {
-                const newBase64 = await recompressBase64Image(c.receiptPhoto, 400, 400, 0.25);
+                const newBase64 = await recompressBase64Image(c.receiptPhoto, 800, 800, 0.5);
                 return { ...c, receiptPhoto: newBase64 };
               } catch (e) {
                 return c;
@@ -567,9 +566,9 @@ export function FormRendicion() {
       if (payloadSize > 800000) {
         const shrunkenComprobantes = await Promise.all(
           payload.comprobantes.map(async (c: Comprobante) => {
-            if (c.receiptPhoto && c.receiptPhoto.length > 30000) {
+            if (c.receiptPhoto && c.receiptPhoto.length > 50000) {
               try {
-                const newBase64 = await recompressBase64Image(c.receiptPhoto, 400, 400, 0.25);
+                const newBase64 = await recompressBase64Image(c.receiptPhoto, 800, 800, 0.5);
                 return { ...c, receiptPhoto: newBase64 };
               } catch (e) {
                 return c;
@@ -1176,9 +1175,9 @@ export function FormRendicion() {
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (file) {
-                const base64 = await compressImageToBase64(file, 400, 400, 0.35); // Compress signature to be lightweight
+                const base64 = await compressImageToBase64(file, 800, 800, 0.6); // Compress signature to be lightweight
                 const sizeInBytes = base64.length * 0.75;
-                if (sizeInBytes > 100 * 1024) {
+                if (sizeInBytes > 150 * 1024) {
                   alert('La imagen de firma es muy pesada. Intente con otra de menor resolución.');
                   return;
                 }

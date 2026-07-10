@@ -564,7 +564,7 @@ export const exportSingleRendicionPDF = async (rendicion: Rendicion, settings: A
           const imgX = imgColX + (imgMaxW - finalW) / 2;
           const imgY = imgColY + (imgMaxH - finalH) / 2;
           
-          doc.addImage(c.receiptPhoto, formatType, imgX, imgY, finalW, finalH, undefined, 'FAST');
+          doc.addImage(c.receiptPhoto, formatType, imgX, imgY, finalW, finalH, undefined, 'SLOW');
 
           // Draw a fine border around the digital image copy to keep it polished
           doc.setDrawColor(229, 231, 235);
