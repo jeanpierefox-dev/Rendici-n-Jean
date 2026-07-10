@@ -66,7 +66,9 @@ export const useAppStore = create<AppState>()(
         if (signature !== undefined) newRendicion.signature = signature;
         if (ingresos !== undefined) newRendicion.ingresos = ingresos;
         
-        await setDoc(doc(db, 'rendiciones', newId), newRendicion);
+        const cleanRendicion = JSON.parse(JSON.stringify(newRendicion));
+        
+        await setDoc(doc(db, 'rendiciones', newId), cleanRendicion);
         
         // Optimistic / Local update
         set((state) => ({
@@ -90,7 +92,9 @@ export const useAppStore = create<AppState>()(
           updateData.totalAmount = updateData.comprobantes.reduce((sum: number, c: any) => sum + c.amount, 0);
         }
         
-        await updateDoc(rendicionRef, updateData);
+        const cleanUpdateData = JSON.parse(JSON.stringify(updateData));
+
+        await updateDoc(rendicionRef, cleanUpdateData);
 
         // Optimistic / Local update
         set((state) => ({

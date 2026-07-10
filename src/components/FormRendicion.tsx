@@ -393,7 +393,8 @@ export function FormRendicion() {
           signature
         };
         
-        await setDoc(doc(db, 'rendiciones', newId), newRendicion);
+        const cleanRendicion = JSON.parse(JSON.stringify(newRendicion));
+        await setDoc(doc(db, 'rendiciones', newId), cleanRendicion);
         
         // Update local state instantly so that on navigate the state is loaded without wait
         useAppStore.setState((state) => ({
