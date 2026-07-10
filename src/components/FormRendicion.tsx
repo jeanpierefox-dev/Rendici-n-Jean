@@ -45,21 +45,29 @@ export function FormRendicion() {
     setLoadingRuc(true);
     setRucError('');
     try {
-      const res = await fetch(`/api/ruc/${rucVal}`);
+      const res = await fetch(`/api/ruc/${rucVal}?type=${emisorDocType}`);
       if (res.ok) {
         const data = await res.json();
         if (data && data.razonSocial) {
           setRazonSocial(data.razonSocial);
         } else {
-          setRucError(rucVal.length === 8 ? 'No se encontró el DNI' : 'No se encontró la Razón Social');
+          // If no name is returned, use a graceful fallback name
+          const fallbackName = emisorDocType === 'RUC' ? `EMISOR RUC ${rucVal}` : `EMISOR DNI ${rucVal}`;
+          setRazonSocial(fallbackName);
+          setRucError(rucVal.length === 8 ? 'No se encontró el DNI, usando provisional' : 'No se encontró la Razón Social, usando provisional');
         }
       } else {
-        const errorData = await res.json().catch(() => ({}));
-        setRucError(errorData.error || (rucVal.length === 8 ? 'Error al conectar para buscar DNI' : 'Error al conectar con SUNAT'));
+        // Even if there is an error status from server, do not block the user. Auto-generate a name they can edit.
+        const fallbackName = emisorDocType === 'RUC' ? `EMISOR RUC ${rucVal}` : `EMISOR DNI ${rucVal}`;
+        setRazonSocial(fallbackName);
+        setRucError('SUNAT no disponible, se usará nombre provisional');
       }
     } catch (err) {
       console.error(err);
-      setRucError('Error al conectar con el servidor');
+      // Client-side network offline fallback
+      const fallbackName = emisorDocType === 'RUC' ? `EMISOR RUC ${rucVal}` : `EMISOR DNI ${rucVal}`;
+      setRazonSocial(fallbackName);
+      setRucError('Sin conexión con servidor, se usará nombre provisional');
     } finally {
       setLoadingRuc(false);
     }
