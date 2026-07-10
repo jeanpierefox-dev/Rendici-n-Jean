@@ -65,7 +65,7 @@ export function FormRendicion() {
   };
 
   const handleRucChange = (val: string) => {
-    const cleanVal = val.replace(/[^0-9]/g, '');
+    const cleanVal = val.replace(/[^0-9]/g, '').slice(0, 11);
     setRuc(cleanVal);
     if (cleanVal.length === 11 || cleanVal.length === 8) {
       fetchRucInfo(cleanVal);
@@ -755,7 +755,7 @@ export function FormRendicion() {
                 <div className="relative">
                   <input 
                     type="text" 
-                    maxLength={11} 
+                    maxLength={18} 
                     value={ruc} 
                     onChange={(e) => handleRucChange(e.target.value)} 
                     placeholder="Ej. 20131312955 o DNI"

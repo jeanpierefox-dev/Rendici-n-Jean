@@ -88,9 +88,13 @@ async function startServer() {
 
       try {
         if (ruc.length === 8) {
-          // Query DNI via apis.net.pe
+          // Query DNI via apis.net.pe with browser-like headers
           const response = await fetch(`https://api.apis.net.pe/v1/dni?numero=${ruc}`, {
-            signal: controller.signal
+            signal: controller.signal,
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+              "Accept": "application/json"
+            }
           });
           
           clearTimeout(timeoutId);
@@ -110,9 +114,13 @@ async function startServer() {
             }
           }
         } else {
-          // Query RUC via apis.net.pe
+          // Query RUC via apis.net.pe with browser-like headers
           const response = await fetch(`https://api.apis.net.pe/v1/ruc?numero=${ruc}`, {
-            signal: controller.signal
+            signal: controller.signal,
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+              "Accept": "application/json"
+            }
           });
           
           clearTimeout(timeoutId);
