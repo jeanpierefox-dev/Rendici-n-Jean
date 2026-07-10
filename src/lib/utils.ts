@@ -85,3 +85,44 @@ export const compressImageToBase64 = (file: File, maxWidth = 800, maxHeight = 80
     reader.onerror = (error) => reject(error);
   });
 };
+
+export const recompressBase64Image = (base64Str: string, maxWidth = 600, maxHeight = 600, quality = 0.4): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    if (!base64Str.startsWith('data:image/')) {
+      resolve(base64Str); // Ignore PDFs or invalid formats
+      return;
+    }
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(base64Str);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve(dataUrl);
+    };
+    img.onerror = (err) => {
+      reject(err);
+    };
+  });
+};

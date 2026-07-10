@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../lib/store';
 import { useNavigate, useParams } from 'react-router';
-import { fileToBase64, compressImageToBase64, formatLocalDate, safeUUID } from '../lib/utils';
+import { fileToBase64, compressImageToBase64, formatLocalDate, safeUUID, recompressBase64Image } from '../lib/utils';
 import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2, Edit3, DollarSign, Calendar, Tag } from 'lucide-react';
 import { Comprobante, DocType, Rendicion, Ingreso } from '../types';
 import { format } from 'date-fns';
@@ -262,7 +262,7 @@ export function FormRendicion() {
     const primaryDate = updatedIngresos.length > 0 ? updatedIngresos[0].date : (new Date().toISOString().split('T')[0]);
 
     try {
-      const payload = {
+      let payload: any = {
         name: name.trim() || 'Sin Nombre',
         advanceAmount: sumIngresos,
         advanceDate: primaryDate,
@@ -271,7 +271,26 @@ export function FormRendicion() {
         signature: updatedSignature !== undefined ? updatedSignature : signature
       };
       
-      const payloadSize = JSON.stringify(payload).length;
+      let payloadSize = JSON.stringify(payload).length;
+      if (payloadSize > 800000) {
+        const shrunkenComprobantes = await Promise.all(
+          payload.comprobantes.map(async (c: Comprobante) => {
+            if (c.receiptPhoto && c.receiptPhoto.length > 30000) {
+              try {
+                const newBase64 = await recompressBase64Image(c.receiptPhoto, 400, 400, 0.25);
+                return { ...c, receiptPhoto: newBase64 };
+              } catch (e) {
+                return c;
+              }
+            }
+            return c;
+          })
+        );
+        payload.comprobantes = shrunkenComprobantes;
+        setComprobantes(shrunkenComprobantes); // Sync back to local UI state
+        payloadSize = JSON.stringify(payload).length;
+      }
+
       if (payloadSize > 900000) {
         setSaveStatus('error');
         const msg = 'El bloque contiene demasiadas imágenes y excede el límite de espacio. Elimine algunas fotos o divídalo en bloques separados.';
@@ -534,7 +553,7 @@ export function FormRendicion() {
     const primaryDate = ingresos.length > 0 ? ingresos[0].date : (new Date().toISOString().split('T')[0]);
 
     try {
-      const payload = {
+      let payload: any = {
         name,
         advanceAmount: sumIngresos,
         advanceDate: primaryDate,
@@ -544,7 +563,26 @@ export function FormRendicion() {
         status: 'Pendiente' as const
       };
       
-      const payloadSize = JSON.stringify(payload).length;
+      let payloadSize = JSON.stringify(payload).length;
+      if (payloadSize > 800000) {
+        const shrunkenComprobantes = await Promise.all(
+          payload.comprobantes.map(async (c: Comprobante) => {
+            if (c.receiptPhoto && c.receiptPhoto.length > 30000) {
+              try {
+                const newBase64 = await recompressBase64Image(c.receiptPhoto, 400, 400, 0.25);
+                return { ...c, receiptPhoto: newBase64 };
+              } catch (e) {
+                return c;
+              }
+            }
+            return c;
+          })
+        );
+        payload.comprobantes = shrunkenComprobantes;
+        setComprobantes(shrunkenComprobantes);
+        payloadSize = JSON.stringify(payload).length;
+      }
+
       if (payloadSize > 900000) {
         setLoading(false);
         setSaveStatus('error');
@@ -557,7 +595,7 @@ export function FormRendicion() {
       if (isEditing && id) {
         await updateRendicion(id, payload);
       } else {
-        await addRendicion(name, sumIngresos, comprobantes, signature, primaryDate, ingresos);
+        await addRendicion(payload.name, payload.advanceAmount, payload.comprobantes, payload.signature, payload.advanceDate, payload.ingresos);
       }
       setLoading(false);
       setSuccess(true);
