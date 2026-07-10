@@ -38,6 +38,7 @@ export function FormRendicion() {
   const [razonSocial, setRazonSocial] = useState('');
   const [loadingRuc, setLoadingRuc] = useState(false);
   const [rucError, setRucError] = useState('');
+  const [emisorDocType, setEmisorDocType] = useState<'RUC' | 'DNI'>('RUC');
 
   const fetchRucInfo = async (rucVal: string) => {
     if (!rucVal || (rucVal.length !== 11 && rucVal.length !== 8)) return;
@@ -65,11 +66,10 @@ export function FormRendicion() {
   };
 
   const handleRucChange = (val: string) => {
-    const cleanVal = val.replace(/[^0-9]/g, '').slice(0, 11);
+    const maxLen = emisorDocType === 'RUC' ? 11 : 8;
+    const cleanVal = val.replace(/[^0-9]/g, '').slice(0, maxLen);
     setRuc(cleanVal);
-    if (cleanVal.length === 11 || cleanVal.length === 8) {
-      fetchRucInfo(cleanVal);
-    } else {
+    if (cleanVal.length === 0) {
       setRazonSocial('');
       setRucError('');
     }
@@ -170,6 +170,7 @@ export function FormRendicion() {
     setType(comp.type);
     setDocumentNumber(comp.documentNumber);
     setRuc(comp.ruc);
+    setEmisorDocType(comp.ruc.length === 8 ? 'DNI' : 'RUC');
     setRazonSocial(comp.razonSocial || '');
     setRucError('');
     // Format date string safely for input element
@@ -187,6 +188,7 @@ export function FormRendicion() {
     setType('Factura');
     setDocumentNumber('');
     setRuc('');
+    setEmisorDocType('RUC');
     setRazonSocial('');
     setRucError('');
     setDate('');
@@ -245,6 +247,7 @@ export function FormRendicion() {
     setType('Factura');
     setDocumentNumber('');
     setRuc('');
+    setEmisorDocType('RUC');
     setRazonSocial('');
     setRucError('');
     setDate('');
@@ -748,24 +751,75 @@ export function FormRendicion() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1 flex justify-between items-center">
-                  <span>RUC (11 dígitos) o DNI (8 dígitos) del Emisor</span>
+                  <span>Documento del Emisor</span>
                   {loadingRuc && <span className="text-[10px] text-blue-600 animate-pulse font-medium">Buscando...</span>}
                   {rucError && <span className="text-[10px] text-red-500 font-medium">{rucError}</span>}
                 </label>
+                
+                {/* Segmented Document Type Selector */}
+                <div className="flex bg-gray-100 p-0.5 rounded-lg mb-2 border border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmisorDocType('RUC');
+                      setRucError('');
+                    }}
+                    className={`flex-1 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                      emisorDocType === 'RUC'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    RUC (11 dígitos)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmisorDocType('DNI');
+                      if (ruc.length > 8) {
+                        setRuc(ruc.slice(0, 8));
+                      }
+                      setRucError('');
+                    }}
+                    className={`flex-1 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                      emisorDocType === 'DNI'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    DNI (8 dígitos)
+                  </button>
+                </div>
+
                 <div className="relative">
                   <input 
                     type="text" 
-                    maxLength={18} 
+                    maxLength={emisorDocType === 'RUC' ? 11 : 8} 
                     value={ruc} 
                     onChange={(e) => handleRucChange(e.target.value)} 
-                    placeholder="Ej. 20131312955 o DNI"
+                    onBlur={() => {
+                      const requiredLen = emisorDocType === 'RUC' ? 11 : 8;
+                      if (ruc.length === requiredLen) {
+                        fetchRucInfo(ruc);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const requiredLen = emisorDocType === 'RUC' ? 11 : 8;
+                        if (ruc.length === requiredLen) {
+                          fetchRucInfo(ruc);
+                        }
+                      }
+                    }}
+                    placeholder={emisorDocType === 'RUC' ? "Ej. 20131312955" : "Ej. 45678912"}
                     className="w-full pl-3 pr-16 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" 
                     required 
                   />
                   <button
                     type="button"
                     onClick={() => fetchRucInfo(ruc)}
-                    disabled={(ruc.length !== 11 && ruc.length !== 8) || loadingRuc}
+                    disabled={(ruc.length !== (emisorDocType === 'RUC' ? 11 : 8)) || loadingRuc}
                     className="absolute right-1.5 top-1.5 bottom-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-50 border border-slate-300 rounded text-[10px] font-bold transition-colors cursor-pointer"
                   >
                     Buscar
