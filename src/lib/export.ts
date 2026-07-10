@@ -119,9 +119,40 @@ export const exportToExcel = (rendiciones: Rendicion[], settings: AppSettings) =
   XLSX.writeFile(workbook, "Rendiciones_Jean_Barsa.xlsx");
 };
 
-export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
+const getImageDimensions = (base64Str: string): Promise<{ width: number; height: number }> => {
+  return new Promise((resolve) => {
+    if (!base64Str || !base64Str.startsWith('data:image')) {
+      resolve({ width: 0, height: 0 });
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = () => {
+      resolve({ width: 0, height: 0 });
+    };
+    img.src = base64Str;
+  });
+};
+
+export const exportSingleRendicionPDF = async (rendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
+  
+  // Pre-load all attached image dimensions asynchronously
+  const imageDimensions: { [key: string]: { width: number; height: number } } = {};
+  for (const c of rendicion.comprobantes) {
+    if (c.receiptPhoto) {
+      try {
+        const key = c.id || c.documentNumber;
+        const dims = await getImageDimensions(c.receiptPhoto);
+        imageDimensions[key] = dims;
+      } catch (err) {
+        console.error("Could not load image dimensions", err);
+      }
+    }
+  }
   
   // Helpers
   const totalGastado = rendicion.comprobantes.reduce((sum, c) => sum + c.amount, 0);
@@ -401,7 +432,8 @@ export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSett
   const comprobantesConFoto = rendicion.comprobantes.filter(c => c.receiptPhoto);
   
   if (comprobantesConFoto.length > 0) {
-    comprobantesConFoto.forEach((c, idx) => {
+    for (let idx = 0; idx < comprobantesConFoto.length; idx++) {
+      const c = comprobantesConFoto[idx];
       doc.addPage();
       
       // Page elegant frame
@@ -420,7 +452,7 @@ export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSett
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(30, 58, 138);
-      doc.text(`IMAGEN DE COMPROBANTE DE PAGO ADJUNTO (ANEXO N° ${idx + 1})`, 16, 20);
+      doc.text(`HOJA FEDATADA - ANEXO N° ${idx + 1}`, 16, 20);
       
       doc.setFontSize(7.5);
       doc.setTextColor(107, 114, 128);
@@ -441,6 +473,55 @@ export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSett
       doc.setDrawColor(209, 213, 219);
       doc.line(12, 34, pageWidth - 12, 34);
 
+      // --- LEFT SIDE: PHYSICAL RECEIPT PASTING BOX ---
+      // Width for pasting: approx 86 mm, Height: approx 236 mm
+      const boxX = 14;
+      const boxY = 40;
+      const boxW = 86;
+      const boxH = 236;
+
+      doc.setDrawColor(156, 163, 175); // light gray border
+      doc.setLineWidth(0.3);
+      doc.setLineDashPattern([2, 2], 0); // dashed line
+      doc.setFillColor(253, 253, 253); // extremely light gray background for pasting
+      doc.rect(boxX, boxY, boxW, boxH, 'FD');
+      doc.setLineDashPattern([], 0); // reset to solid lines
+
+      const boxCenterX = boxX + (boxW / 2);
+      const boxCenterY = boxY + (boxH / 2);
+
+      // Paste text labels inside the box
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(156, 163, 175); // gray-400
+      doc.text('PEGAR COMPROBANTE', boxCenterX, boxCenterY - 15, { align: 'center' });
+      doc.text('ORIGINAL AQUÍ', boxCenterX, boxCenterY - 9, { align: 'center' });
+
+      // Visual helper (dotted icon shape of a typical receipt)
+      doc.setLineWidth(0.3);
+      doc.setDrawColor(209, 213, 219);
+      doc.setLineDashPattern([1, 1], 0);
+      doc.rect(boxCenterX - 18, boxCenterY + 4, 36, 24);
+      doc.setLineDashPattern([], 0);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(156, 163, 175);
+      doc.text('Original Físico', boxCenterX, boxCenterY + 16, { align: 'center' });
+
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(156, 163, 175);
+      doc.text('(Sujete firmemente con cinta o goma)', boxCenterX, boxCenterY + 40, { align: 'center' });
+      doc.text('Ancho máx: 82 mm', boxCenterX, boxCenterY + 45, { align: 'center' });
+
+      // --- RIGHT SIDE: COMPLETE ATTACHED DIGITAL IMAGE ---
+      // Width for image: approx 92 mm, Height: approx 236 mm
+      const imgMaxW = 92;
+      const imgMaxH = 236;
+      const imgColX = 104;
+      const imgColY = 40;
+
       // Add receipt photo image centered in the space
       if (c.receiptPhoto) {
         try {
@@ -451,23 +532,54 @@ export const exportSingleRendicionPDF = (rendicion: Rendicion, settings: AppSett
             formatType = 'GIF';
           }
           
-          // Center image on the page
-          const imgWidth = 140;
-          const imgHeight = 210;
-          const imgX = (pageWidth - imgWidth) / 2;
-          const imgY = 42;
+          // Get loaded dimensions (or default to max if missing)
+          const key = c.id || c.documentNumber;
+          const dims = imageDimensions[key];
+          let origW = 0;
+          let origH = 0;
+          if (dims) {
+            origW = dims.width;
+            origH = dims.height;
+          }
+
+          let finalW = imgMaxW;
+          let finalH = imgMaxH;
+
+          if (origW > 0 && origH > 0) {
+            const ratio = origW / origH;
+            const containerRatio = imgMaxW / imgMaxH;
+            
+            if (ratio > containerRatio) {
+              // Width is limiting
+              finalW = imgMaxW;
+              finalH = imgMaxW / ratio;
+            } else {
+              // Height is limiting
+              finalH = imgMaxH;
+              finalW = imgMaxH * ratio;
+            }
+          }
+
+          // Center the image inside the right side column's slot
+          const imgX = imgColX + (imgMaxW - finalW) / 2;
+          const imgY = imgColY + (imgMaxH - finalH) / 2;
           
-          doc.addImage(c.receiptPhoto, formatType, imgX, imgY, imgWidth, imgHeight, undefined, 'FAST');
+          doc.addImage(c.receiptPhoto, formatType, imgX, imgY, finalW, finalH, undefined, 'FAST');
+
+          // Draw a fine border around the digital image copy to keep it polished
+          doc.setDrawColor(229, 231, 235);
+          doc.setLineWidth(0.2);
+          doc.rect(imgX, imgY, finalW, finalH);
         } catch (imgError) {
           console.error("Could not render receipt image in PDF", imgError);
           doc.setFont('helvetica', 'italic');
-          doc.setFontSize(9);
+          doc.setFontSize(8.5);
           doc.setTextColor(220, 38, 38);
-          doc.text("No se pudo renderizar la imagen del comprobante en el archivo PDF.", pageWidth / 2, 100, { align: 'center' });
-          doc.text("La imagen original se conserva de forma segura en la plataforma.", pageWidth / 2, 105, { align: 'center' });
+          doc.text("No se pudo renderizar la copia digital.", imgColX + (imgMaxW / 2), 120, { align: 'center' });
+          doc.text("La imagen original se conserva en el sistema.", imgColX + (imgMaxW / 2), 125, { align: 'center' });
         }
       }
-    });
+    }
   }
 
   // Save the document named specifically based on user name & block name
