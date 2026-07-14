@@ -95,10 +95,22 @@ export default function App() {
     const unsubscribe = onSnapshot(
       q, 
       (snapshot) => {
-        let rendiciones = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          id: doc.id
-        })) as Rendicion[];
+        let rendiciones = snapshot.docs.map(doc => {
+          const remoteData = doc.data() as Rendicion;
+          const localRendicion = useAppStore.getState().rendiciones.find(r => r.id === doc.id);
+          const mergedComprobantes = (remoteData.comprobantes || []).map((c: any) => {
+            const localC = localRendicion?.comprobantes?.find((lc: any) => lc.id === c.id);
+            return {
+              ...c,
+              receiptPhoto: c.receiptPhoto || localC?.receiptPhoto
+            };
+          });
+          return {
+            ...remoteData,
+            id: doc.id,
+            comprobantes: mergedComprobantes
+          } as Rendicion;
+        });
 
         // Sort client-side for regular users since we didn't specify orderBy in query
         if (currentUser.role !== 'admin') {

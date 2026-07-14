@@ -4,14 +4,46 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { exportToPDF, exportToExcel, exportSingleRendicionPDF } from '../lib/export';
-import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp, FileText, ShieldCheck, Trash2 } from 'lucide-react';
-import { Rendicion } from '../types';
+import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp, FileText, ShieldCheck, Trash2, Loader2 } from 'lucide-react';
+import { Rendicion, Comprobante } from '../types';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { formatLocalDate } from '../lib/utils';
 
 export function DashboardAdmin() {
   const { rendiciones, settings, updateRendicionStatus, deleteRendicion } = useAppStore();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null);
+
+  const handleViewPhoto = async (c: Comprobante, rendicionId: string) => {
+    if (c.receiptPhoto) {
+      setSelectedImage(c.receiptPhoto);
+    } else {
+      setLoadingPhotoId(c.id);
+      try {
+        const docSnap = await getDoc(doc(db, 'receipt_photos', c.id));
+        if (docSnap.exists() && docSnap.data().photo) {
+          const photo = docSnap.data().photo;
+          // Update the store's state so it's cached in memory!
+          useAppStore.setState(state => ({
+            rendiciones: state.rendiciones.map(r => r.id === rendicionId ? {
+              ...r,
+              comprobantes: r.comprobantes.map(comp => comp.id === c.id ? { ...comp, receiptPhoto: photo } : comp)
+            } : r)
+          }));
+          setSelectedImage(photo);
+        } else {
+          alert('No se encontró el archivo adjunto en la base de datos o el bloque fue guardado sin imagen.');
+        }
+      } catch (err) {
+        console.error("Error fetching photo:", err);
+        alert('Error al descargar el archivo adjunto.');
+      } finally {
+        setLoadingPhotoId(null);
+      }
+    }
+  };
 
   const handleDelete = async (id: string, name: string) => {
     if (window.confirm(`¿Estás seguro de que deseas eliminar la rendición "${name}"? Esta acción es irreversible.`)) {
@@ -266,12 +298,21 @@ export function DashboardAdmin() {
                                     </td>
                                     <td className="py-2 text-gray-900 font-medium">S/ {c.amount.toFixed(2)}</td>
                                     <td className="py-2 text-right">
-                                      {c.receiptPhoto ? (
+                                      {c.receiptPhoto || c.hasPhoto ? (
                                         <button 
-                                          onClick={() => setSelectedImage(c.receiptPhoto!)}
-                                          className="inline-flex items-center text-blue-600 hover:text-blue-800 text-xs font-medium"
+                                          onClick={() => handleViewPhoto(c, rendicion.id)}
+                                          disabled={loadingPhotoId === c.id}
+                                          className="inline-flex items-center text-blue-600 hover:text-blue-800 text-xs font-medium disabled:opacity-50"
                                         >
-                                          <Eye className="w-3 h-3 mr-1" /> Ver
+                                          {loadingPhotoId === c.id ? (
+                                            <>
+                                              <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Cargando...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Eye className="w-3 h-3 mr-1" /> Ver
+                                            </>
+                                          )}
                                         </button>
                                       ) : (
                                         <span className="text-gray-400 text-xs italic">-</span>

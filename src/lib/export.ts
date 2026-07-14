@@ -5,6 +5,9 @@ import { Rendicion, AppSettings, Ingreso } from '../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { formatLocalDate } from './utils';
+import { doc as firestoreDoc, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
+import { useAppStore } from './store';
 
 export const exportToPDF = (rendiciones: Rendicion[], settings: AppSettings) => {
   const doc = new jsPDF();
@@ -137,6 +140,29 @@ const getImageDimensions = (base64Str: string): Promise<{ width: number; height:
 };
 
 export const exportSingleRendicionPDF = async (rendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
+  // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection
+  for (const c of rendicion.comprobantes) {
+    if (!c.receiptPhoto) {
+      try {
+        const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', c.id));
+        const data = photoDoc.data() as any;
+        if (photoDoc.exists() && data?.photo) {
+          const photo = data.photo;
+          c.receiptPhoto = photo;
+          // Dynamically cache in store state in memory
+          useAppStore.setState(state => ({
+            rendiciones: state.rendiciones.map(r => r.id === rendicion.id ? {
+              ...r,
+              comprobantes: r.comprobantes.map(comp => comp.id === c.id ? { ...comp, receiptPhoto: photo } : comp)
+            } : r)
+          }));
+        }
+      } catch (err) {
+        console.error("Could not fetch missing receipt photo for PDF:", err);
+      }
+    }
+  }
+
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
   

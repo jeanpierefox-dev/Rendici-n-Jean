@@ -57,7 +57,7 @@ export const useAppStore = create<AppState>()(
           createdAt: new Date().toISOString(),
           userId: currentUser.id,
           userName: currentUser.name,
-          comprobantes: comprobantes.map(c => ({ ...c, id: safeUUID() })),
+          comprobantes: comprobantes.map(c => ({ ...c, id: (c as any).id || safeUUID() })),
           totalAmount,
           advanceAmount,
         };
@@ -66,11 +66,30 @@ export const useAppStore = create<AppState>()(
         if (signature !== undefined) newRendicion.signature = signature;
         if (ingresos !== undefined) newRendicion.ingresos = ingresos;
         
-        const cleanRendicion = JSON.parse(JSON.stringify(newRendicion));
+        // Save photos to dedicated 'receipt_photos' collection in Firestore
+        const comprobantesToSave = [];
+        for (const c of newRendicion.comprobantes) {
+          const compCopy = { ...c };
+          if (compCopy.receiptPhoto) {
+            try {
+              await setDoc(doc(db, 'receipt_photos', compCopy.id), { photo: compCopy.receiptPhoto });
+            } catch (err) {
+              console.error("Error saving receipt photo to Firestore:", err);
+            }
+            delete compCopy.receiptPhoto;
+            compCopy.hasPhoto = true;
+          }
+          comprobantesToSave.push(compCopy);
+        }
+
+        const cleanRendicion = JSON.parse(JSON.stringify({
+          ...newRendicion,
+          comprobantes: comprobantesToSave
+        }));
         
         await setDoc(doc(db, 'rendiciones', newId), cleanRendicion);
         
-        // Optimistic / Local update
+        // Optimistic / Local update - KEEP original with receiptPhoto in local state
         set((state) => ({
           rendiciones: [newRendicion, ...state.rendiciones]
         }));
@@ -91,12 +110,34 @@ export const useAppStore = create<AppState>()(
         if (updateData.comprobantes) {
           updateData.totalAmount = updateData.comprobantes.reduce((sum: number, c: any) => sum + c.amount, 0);
         }
+
+        // Separate photos before saving to firestore
+        let comprobantesToSave = undefined;
+        if (updateData.comprobantes) {
+          comprobantesToSave = [];
+          for (const c of updateData.comprobantes) {
+            const compCopy = { ...c };
+            if (compCopy.receiptPhoto) {
+              try {
+                await setDoc(doc(db, 'receipt_photos', compCopy.id), { photo: compCopy.receiptPhoto });
+              } catch (err) {
+                console.error("Error saving receipt photo to Firestore:", err);
+              }
+              delete compCopy.receiptPhoto;
+              compCopy.hasPhoto = true;
+            }
+            comprobantesToSave.push(compCopy);
+          }
+        }
         
-        const cleanUpdateData = JSON.parse(JSON.stringify(updateData));
+        const cleanUpdateData = JSON.parse(JSON.stringify({
+          ...updateData,
+          ...(comprobantesToSave !== undefined ? { comprobantes: comprobantesToSave } : {})
+        }));
 
         await updateDoc(rendicionRef, cleanUpdateData);
 
-        // Optimistic / Local update
+        // Optimistic / Local update - KEEP original with receiptPhoto in local state
         set((state) => ({
           rendiciones: state.rendiciones.map(r => r.id === id ? { ...r, ...updateData } : r)
         }));

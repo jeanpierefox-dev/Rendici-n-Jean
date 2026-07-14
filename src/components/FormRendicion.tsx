@@ -230,11 +230,12 @@ export function FormRendicion() {
         return;
       }
       try {
-        const base64 = await compressImageToBase64(file, 1600, 1600, 0.85); 
+        // Compress image to 2048x2048 at 0.9 quality for beautiful crisp resolution in PDF
+        const base64 = await compressImageToBase64(file, 2048, 2048, 0.9); 
         
         const sizeInBytes = base64.length * 0.75;
-        if (sizeInBytes > 800 * 1024) {
-          alert('El archivo adjunto es muy pesado (máx 800KB comprimido). Intente con una foto de menor resolución.');
+        if (sizeInBytes > 950 * 1024) {
+          alert('El archivo adjunto es muy pesado (máx 950KB comprimido). Intente con una foto de menor resolución.');
           return;
         }
         
@@ -261,7 +262,7 @@ export function FormRendicion() {
     const primaryDate = updatedIngresos.length > 0 ? updatedIngresos[0].date : (new Date().toISOString().split('T')[0]);
 
     try {
-      let payload: any = {
+      const payload: any = {
         name: name.trim() || 'Sin Nombre',
         advanceAmount: sumIngresos,
         advanceDate: primaryDate,
@@ -270,34 +271,6 @@ export function FormRendicion() {
         signature: updatedSignature !== undefined ? updatedSignature : signature
       };
       
-      let payloadSize = JSON.stringify(payload).length;
-      if (payloadSize > 950000) {
-        const shrunkenComprobantes = await Promise.all(
-          payload.comprobantes.map(async (c: Comprobante) => {
-            if (c.receiptPhoto && c.receiptPhoto.length > 50000) {
-              try {
-                const newBase64 = await recompressBase64Image(c.receiptPhoto, 1200, 1200, 0.65);
-                return { ...c, receiptPhoto: newBase64 };
-              } catch (e) {
-                return c;
-              }
-            }
-            return c;
-          })
-        );
-        payload.comprobantes = shrunkenComprobantes;
-        setComprobantes(shrunkenComprobantes); // Sync back to local UI state
-        payloadSize = JSON.stringify(payload).length;
-      }
-
-      if (payloadSize > 900000) {
-        setSaveStatus('error');
-        const msg = 'El bloque contiene demasiadas imágenes y excede el límite de espacio. Elimine algunas fotos o divídalo en bloques separados.';
-        setErrorMessage(msg);
-        alert(msg);
-        return;
-      }
-
       await updateRendicion(id, payload);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -552,7 +525,7 @@ export function FormRendicion() {
     const primaryDate = ingresos.length > 0 ? ingresos[0].date : (new Date().toISOString().split('T')[0]);
 
     try {
-      let payload: any = {
+      const payload: any = {
         name,
         advanceAmount: sumIngresos,
         advanceDate: primaryDate,
@@ -562,35 +535,6 @@ export function FormRendicion() {
         status: 'Pendiente' as const
       };
       
-      let payloadSize = JSON.stringify(payload).length;
-      if (payloadSize > 950000) {
-        const shrunkenComprobantes = await Promise.all(
-          payload.comprobantes.map(async (c: Comprobante) => {
-            if (c.receiptPhoto && c.receiptPhoto.length > 50000) {
-              try {
-                const newBase64 = await recompressBase64Image(c.receiptPhoto, 1200, 1200, 0.65);
-                return { ...c, receiptPhoto: newBase64 };
-              } catch (e) {
-                return c;
-              }
-            }
-            return c;
-          })
-        );
-        payload.comprobantes = shrunkenComprobantes;
-        setComprobantes(shrunkenComprobantes);
-        payloadSize = JSON.stringify(payload).length;
-      }
-
-      if (payloadSize > 900000) {
-        setLoading(false);
-        setSaveStatus('error');
-        const msg = 'El bloque contiene demasiadas imágenes y excede el límite de espacio (1MB). Por favor, elimine algunas fotos o divida en múltiples bloques de rendición.';
-        setErrorMessage(msg);
-        alert(msg);
-        return;
-      }
-
       if (isEditing && id) {
         await updateRendicion(id, payload);
       } else {

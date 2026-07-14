@@ -10,6 +10,7 @@ export interface Comprobante {
   date: string; // ISO string
   amount: number;
   receiptPhoto?: string; // base64
+  hasPhoto?: boolean;
   category?: string;
   observation?: string;
 }
