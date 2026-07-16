@@ -15,6 +15,7 @@ export function DashboardAdmin() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null);
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
 
   const handleViewPhoto = async (c: Comprobante, rendicionId: string) => {
     if (c.receiptPhoto) {
@@ -223,11 +224,26 @@ export function DashboardAdmin() {
                           </>
                         )}
                         <button 
-                          onClick={() => exportSingleRendicionPDF(rendicion, settings)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                          onClick={async () => {
+                            setGeneratingPdfId(rendicion.id);
+                            try {
+                              await exportSingleRendicionPDF(rendicion, settings);
+                            } catch (err) {
+                              console.error(err);
+                              alert('Error al generar el reporte PDF.');
+                            } finally {
+                              setGeneratingPdfId(null);
+                            }
+                          }}
+                          disabled={generatingPdfId === rendicion.id}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer disabled:opacity-50"
                           title="Descargar Reporte Completo (PDF)"
                         >
-                          <Download className="w-5 h-5" />
+                          {generatingPdfId === rendicion.id ? (
+                            <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                          ) : (
+                            <Download className="w-5 h-5" />
+                          )}
                         </button>
                         <button 
                           onClick={() => handleDelete(rendicion.id, rendicion.name)}
@@ -355,12 +371,32 @@ export function DashboardAdmin() {
                           {/* Export Actions Panel for Admins */}
                           <div className="mt-6 pt-4 border-t border-gray-200 flex flex-wrap gap-3">
                             <button
-                              onClick={() => exportSingleRendicionPDF(rendicion, settings)}
-                              className="inline-flex items-center px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-blue-200/50"
+                              onClick={async () => {
+                                setGeneratingPdfId(rendicion.id);
+                                try {
+                                  await exportSingleRendicionPDF(rendicion, settings);
+                                } catch (err) {
+                                  console.error(err);
+                                  alert('Error al generar el reporte PDF.');
+                                } finally {
+                                  setGeneratingPdfId(null);
+                                }
+                              }}
+                              disabled={generatingPdfId === rendicion.id}
+                              className="inline-flex items-center px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-blue-200/50 disabled:opacity-50"
                               title="Descargar Reporte de Liquidación de Gastos con Comprobantes"
                             >
-                              <FileText className="w-4 h-4 text-blue-600" />
-                              Descargar Reporte PDF
+                              {generatingPdfId === rendicion.id ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                  Generando PDF...
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="w-4 h-4 text-blue-600" />
+                                  Descargar Reporte PDF
+                                </>
+                              )}
                             </button>
                             <button
                               onClick={() => handleDelete(rendicion.id, rendicion.name)}

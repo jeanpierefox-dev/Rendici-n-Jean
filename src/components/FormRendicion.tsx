@@ -230,8 +230,8 @@ export function FormRendicion() {
         return;
       }
       try {
-        // Compress image to 2048x2048 at 0.9 quality for beautiful crisp resolution in PDF
-        const base64 = await compressImageToBase64(file, 2048, 2048, 0.9); 
+        // Compress image to 1200x1200 at 0.75 quality for beautiful crisp resolution in PDF but lightweight size
+        const base64 = await compressImageToBase64(file, 1200, 1200, 0.75); 
         
         const sizeInBytes = base64.length * 0.75;
         if (sizeInBytes > 950 * 1024) {

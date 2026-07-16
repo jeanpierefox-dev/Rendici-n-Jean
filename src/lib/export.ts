@@ -140,28 +140,35 @@ const getImageDimensions = (base64Str: string): Promise<{ width: number; height:
 };
 
 export const exportSingleRendicionPDF = async (rendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
-  // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection
-  for (const c of rendicion.comprobantes) {
-    if (!c.receiptPhoto) {
+  // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
+  const updatedComprobantes = await Promise.all(rendicion.comprobantes.map(async (c) => {
+    if (!c.receiptPhoto && c.id) {
       try {
         const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', c.id));
         const data = photoDoc.data() as any;
         if (photoDoc.exists() && data?.photo) {
-          const photo = data.photo;
-          c.receiptPhoto = photo;
-          // Dynamically cache in store state in memory
-          useAppStore.setState(state => ({
-            rendiciones: state.rendiciones.map(r => r.id === rendicion.id ? {
-              ...r,
-              comprobantes: r.comprobantes.map(comp => comp.id === c.id ? { ...comp, receiptPhoto: photo } : comp)
-            } : r)
-          }));
+          return { ...c, receiptPhoto: data.photo };
         }
       } catch (err) {
         console.error("Could not fetch missing receipt photo for PDF:", err);
       }
     }
+    return c;
+  }));
+
+  // Update store ONCE in one single batch!
+  const hasNewPhotos = updatedComprobantes.some((c, i) => c.receiptPhoto !== rendicion.comprobantes[i].receiptPhoto);
+  if (hasNewPhotos) {
+    useAppStore.setState(state => ({
+      rendiciones: state.rendiciones.map(r => r.id === rendicion.id ? {
+        ...r,
+        comprobantes: updatedComprobantes
+      } : r)
+    }));
   }
+
+  // Mutate local reference so the PDF generator works with the newly fetched photos
+  rendicion.comprobantes = updatedComprobantes;
 
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -590,7 +597,7 @@ export const exportSingleRendicionPDF = async (rendicion: Rendicion, settings: A
           const imgX = imgColX + (imgMaxW - finalW) / 2;
           const imgY = imgColY + (imgMaxH - finalH) / 2;
           
-          doc.addImage(c.receiptPhoto, formatType, imgX, imgY, finalW, finalH, undefined, 'SLOW');
+          doc.addImage(c.receiptPhoto, formatType, imgX, imgY, finalW, finalH, undefined, 'FAST');
 
           // Draw a fine border around the digital image copy to keep it polished
           doc.setDrawColor(229, 231, 235);

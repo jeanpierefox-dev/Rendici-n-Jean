@@ -6,13 +6,14 @@ import { es } from 'date-fns/locale';
 import { 
   FolderOpen, PlusCircle, Clock, CheckCircle2, XCircle, 
   FileText, ChevronDown, ChevronUp, Calendar, Pencil, 
-  Coins, Landmark, AlertCircle, ArrowRight
+  Coins, Landmark, AlertCircle, ArrowRight, Loader2
 } from 'lucide-react';
 import { exportToPDF, exportSingleRendicionPDF } from '../lib/export';
 
 export function DashboardUser() {
   const { rendiciones, currentUser, settings } = useAppStore();
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
 
   // Filter only current user's rendiciones
   const myRendiciones = rendiciones.filter(r => r.userId === currentUser.id);
@@ -242,11 +243,31 @@ export function DashboardUser() {
 
                             {/* Download PDF Button */}
                             <button
-                              onClick={() => exportSingleRendicionPDF(rendicion, settings)}
-                              className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2"
+                              onClick={async () => {
+                                setGeneratingPdfId(rendicion.id);
+                                try {
+                                  await exportSingleRendicionPDF(rendicion, settings);
+                                } catch (err) {
+                                  console.error(err);
+                                  alert('Error al generar el reporte PDF.');
+                                } finally {
+                                  setGeneratingPdfId(null);
+                                }
+                              }}
+                              disabled={generatingPdfId === rendicion.id}
+                              className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2 disabled:opacity-50"
                             >
-                              <FileText className="w-3.5 h-3.5 text-blue-600" />
-                              Descargar Reporte (PDF)
+                              {generatingPdfId === rendicion.id ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                                  Generando PDF...
+                                </>
+                              ) : (
+                                <>
+                                  <FileText className="w-3.5 h-3.5 text-blue-600" />
+                                  Descargar Reporte (PDF)
+                                </>
+                              )}
                             </button>
                           </div>
                         </div>
