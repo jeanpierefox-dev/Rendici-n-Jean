@@ -66,20 +66,27 @@ export const useAppStore = create<AppState>()(
         if (signature !== undefined) newRendicion.signature = signature;
         if (ingresos !== undefined) newRendicion.ingresos = ingresos;
         
-        // Save photos to dedicated 'receipt_photos' collection in Firestore
-        const comprobantesToSave = [];
-        for (const c of newRendicion.comprobantes) {
+        // Save photos to dedicated 'receipt_photos' collection in Firestore in parallel
+        const uploadPromises: Promise<void>[] = [];
+        const comprobantesToSave = newRendicion.comprobantes.map((c: any) => {
           const compCopy = { ...c };
           if (compCopy.receiptPhoto) {
-            try {
-              await setDoc(doc(db, 'receipt_photos', compCopy.id), { photo: compCopy.receiptPhoto });
-            } catch (err) {
-              console.error("Error saving receipt photo to Firestore:", err);
-            }
+            const photoVal = compCopy.receiptPhoto;
+            const docId = compCopy.id;
+            uploadPromises.push(
+              setDoc(doc(db, 'receipt_photos', docId), { photo: photoVal })
+                .catch(err => {
+                  console.error("Error saving receipt photo to Firestore:", err);
+                })
+            );
             delete compCopy.receiptPhoto;
             compCopy.hasPhoto = true;
           }
-          comprobantesToSave.push(compCopy);
+          return compCopy;
+        });
+
+        if (uploadPromises.length > 0) {
+          await Promise.all(uploadPromises);
         }
 
         const cleanRendicion = JSON.parse(JSON.stringify({
@@ -111,22 +118,29 @@ export const useAppStore = create<AppState>()(
           updateData.totalAmount = updateData.comprobantes.reduce((sum: number, c: any) => sum + c.amount, 0);
         }
 
-        // Separate photos before saving to firestore
+        // Separate photos before saving to firestore in parallel
         let comprobantesToSave = undefined;
         if (updateData.comprobantes) {
-          comprobantesToSave = [];
-          for (const c of updateData.comprobantes) {
+          const uploadPromises: Promise<void>[] = [];
+          comprobantesToSave = updateData.comprobantes.map((c: any) => {
             const compCopy = { ...c };
             if (compCopy.receiptPhoto) {
-              try {
-                await setDoc(doc(db, 'receipt_photos', compCopy.id), { photo: compCopy.receiptPhoto });
-              } catch (err) {
-                console.error("Error saving receipt photo to Firestore:", err);
-              }
+              const photoVal = compCopy.receiptPhoto;
+              const docId = compCopy.id;
+              uploadPromises.push(
+                setDoc(doc(db, 'receipt_photos', docId), { photo: photoVal })
+                  .catch(err => {
+                    console.error("Error saving receipt photo to Firestore:", err);
+                  })
+              );
               delete compCopy.receiptPhoto;
               compCopy.hasPhoto = true;
             }
-            comprobantesToSave.push(compCopy);
+            return compCopy;
+          });
+
+          if (uploadPromises.length > 0) {
+            await Promise.all(uploadPromises);
           }
         }
         
