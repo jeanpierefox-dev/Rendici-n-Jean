@@ -23,7 +23,7 @@ interface AppState {
   currentUser: User;
   
   enterApp: () => void;
-  addRendicion: (name: string, advanceAmount: number, comprobantes: Omit<Comprobante, 'id'>[], signature?: string, advanceDate?: string, ingresos?: any[]) => Promise<void>;
+  addRendicion: (name: string, advanceAmount: number, comprobantes: Omit<Comprobante, 'id'>[], signature?: string, advanceDate?: string, ingresos?: any[]) => Promise<string>;
   updateRendicion: (id: string, updates: Partial<Rendicion>) => Promise<void>;
   updateRendicionStatus: (id: string, newStatus: Rendicion['status']) => Promise<void>;
   deleteRendicion: (id: string) => Promise<void>;
@@ -96,12 +96,24 @@ export const useAppStore = create<AppState>()(
         
         await setDoc(doc(db, 'rendiciones', newId), cleanRendicion);
         
-        // Optimistic / Local update - KEEP original with receiptPhoto in local state
+        // Optimistic / Local update - clear heavy base64 receiptPhoto in local state to avoid performance bottleneck
+        const localComprobantes = comprobantesToSave.map((c: any) => ({
+          ...c,
+          receiptPhoto: undefined,
+          hasPhoto: c.hasPhoto || !!c.receiptPhoto
+        }));
+
+        const localRendicion = {
+          ...newRendicion,
+          comprobantes: localComprobantes
+        };
+
         set((state) => ({
-          rendiciones: [newRendicion, ...state.rendiciones]
+          rendiciones: [localRendicion, ...state.rendiciones]
         }));
 
         get().addNotification('admin1', 'Nueva Rendición', `${currentUser.name} ha enviado el bloque "${name}" por S/ ${totalAmount.toFixed(2)}.`);
+        return newId;
       },
 
       updateRendicion: async (id, updates) => {
@@ -151,9 +163,21 @@ export const useAppStore = create<AppState>()(
 
         await updateDoc(rendicionRef, cleanUpdateData);
 
-        // Optimistic / Local update - KEEP original with receiptPhoto in local state
+        const updatedLocalComprobantes = updateData.comprobantes 
+          ? comprobantesToSave.map((c: any) => ({
+              ...c,
+              receiptPhoto: undefined,
+              hasPhoto: c.hasPhoto || !!c.receiptPhoto
+            }))
+          : undefined;
+
+        // Optimistic / Local update - clear heavy base64 receiptPhoto in local state to avoid performance bottleneck
         set((state) => ({
-          rendiciones: state.rendiciones.map(r => r.id === id ? { ...r, ...updateData } : r)
+          rendiciones: state.rendiciones.map(r => r.id === id ? { 
+            ...r, 
+            ...updateData,
+            ...(updatedLocalComprobantes !== undefined ? { comprobantes: updatedLocalComprobantes } : {})
+          } : r)
         }));
       },
 

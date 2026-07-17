@@ -230,8 +230,8 @@ export function FormRendicion() {
         return;
       }
       try {
-        // Compress image to 1200x1200 at 0.75 quality for beautiful crisp resolution in PDF but lightweight size
-        const base64 = await compressImageToBase64(file, 1200, 1200, 0.75); 
+        // Compress image to 1000x1000 at 0.70 quality for beautiful crisp resolution in PDF but extremely lightweight size
+        const base64 = await compressImageToBase64(file, 1000, 1000, 0.70); 
         
         const sizeInBytes = base64.length * 0.75;
         if (sizeInBytes > 950 * 1024) {
@@ -272,6 +272,15 @@ export function FormRendicion() {
       };
       
       await updateRendicion(id, payload);
+
+      // Clear heavy base64 strings from local state after a successful save
+      const clearedComprobantes = updatedComprobantes.map(c => ({
+        ...c,
+        receiptPhoto: undefined,
+        hasPhoto: c.hasPhoto || !!c.receiptPhoto
+      }));
+      setComprobantes(clearedComprobantes);
+
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (err: any) {
@@ -387,36 +396,27 @@ export function FormRendicion() {
       // Seamlessly transition from /new to /edit/:id on first document addition
       setSaveStatus('saving');
       try {
-        const newId = safeUUID();
         const blockName = name.trim() || 'Rendición Temporal';
         const sumIngresos = ingresos.reduce((sum, ing) => sum + ing.amount, 0);
         const primaryDate = ingresos.length > 0 ? ingresos[0].date : (new Date().toISOString().split('T')[0]);
         
-        const { currentUser } = useAppStore.getState();
-        const totalAmount = updatedComprobantes.reduce((sum, c) => sum + c.amount, 0);
+        // Use addRendicion store action! This separates photos and stores them correctly
+        const newId = await addRendicion(
+          blockName,
+          sumIngresos,
+          updatedComprobantes,
+          signature,
+          primaryDate,
+          ingresos
+        );
         
-        const newRendicion: Rendicion = {
-          id: newId,
-          name: blockName,
-          status: 'Pendiente',
-          createdAt: new Date().toISOString(),
-          userId: currentUser.id,
-          userName: currentUser.name,
-          comprobantes: updatedComprobantes,
-          totalAmount,
-          advanceAmount: sumIngresos,
-          advanceDate: primaryDate,
-          ingresos,
-          signature
-        };
-        
-        const cleanRendicion = JSON.parse(JSON.stringify(newRendicion));
-        await setDoc(doc(db, 'rendiciones', newId), cleanRendicion);
-        
-        // Update local state instantly so that on navigate the state is loaded without wait
-        useAppStore.setState((state) => ({
-          rendiciones: [newRendicion, ...state.rendiciones]
+        // Clear heavy base64 strings from local state after saving
+        const clearedComprobantes = updatedComprobantes.map(c => ({
+          ...c,
+          receiptPhoto: undefined,
+          hasPhoto: c.hasPhoto || !!c.receiptPhoto
         }));
+        setComprobantes(clearedComprobantes);
 
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);

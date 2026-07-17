@@ -139,9 +139,9 @@ const getImageDimensions = (base64Str: string): Promise<{ width: number; height:
   });
 };
 
-export const exportSingleRendicionPDF = async (rendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
+export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
-  const updatedComprobantes = await Promise.all(rendicion.comprobantes.map(async (c) => {
+  const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
     if (!c.receiptPhoto && c.id) {
       try {
         const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', c.id));
@@ -157,18 +157,21 @@ export const exportSingleRendicionPDF = async (rendicion: Rendicion, settings: A
   }));
 
   // Update store ONCE in one single batch!
-  const hasNewPhotos = updatedComprobantes.some((c, i) => c.receiptPhoto !== rendicion.comprobantes[i].receiptPhoto);
+  const hasNewPhotos = updatedComprobantes.some((c, i) => c.receiptPhoto !== storeRendicion.comprobantes[i].receiptPhoto);
   if (hasNewPhotos) {
     useAppStore.setState(state => ({
-      rendiciones: state.rendiciones.map(r => r.id === rendicion.id ? {
+      rendiciones: state.rendiciones.map(r => r.id === storeRendicion.id ? {
         ...r,
         comprobantes: updatedComprobantes
       } : r)
     }));
   }
 
-  // Mutate local reference so the PDF generator works with the newly fetched photos
-  rendicion.comprobantes = updatedComprobantes;
+  // Create a safe, copy of the rendicion object to avoid mutating frozen store objects
+  const rendicion: Rendicion = {
+    ...storeRendicion,
+    comprobantes: updatedComprobantes
+  };
 
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
