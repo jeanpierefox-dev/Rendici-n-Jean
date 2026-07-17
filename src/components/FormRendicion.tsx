@@ -232,8 +232,8 @@ export function FormRendicion() {
         return;
       }
       try {
-        // Compress image to 800x800 at 0.45 quality for extremely fast saving and loading without losing readability
-        const base64 = await compressImageToBase64(file, 800, 800, 0.45); 
+        // Compress image to 640x640 at 0.30 quality for ultra-fast saving, syncing, and loading without losing readability
+        const base64 = await compressImageToBase64(file, 640, 640, 0.30); 
         
         const sizeInBytes = base64.length * 0.75;
         if (sizeInBytes > 950 * 1024) {
@@ -263,6 +263,14 @@ export function FormRendicion() {
     // Find earliest date or main date
     const primaryDate = updatedIngresos.length > 0 ? updatedIngresos[0].date : (new Date().toISOString().split('T')[0]);
 
+    // Clear heavy base64 strings from local state IMMEDIATELY to prevent UI lag while we wait for network sync
+    const clearedComprobantes = updatedComprobantes.map(c => ({
+      ...c,
+      receiptPhoto: undefined,
+      hasPhoto: c.hasPhoto || !!c.receiptPhoto
+    }));
+    setComprobantes(clearedComprobantes);
+
     try {
       const payload: any = {
         name: name.trim() || 'Sin Nombre',
@@ -275,14 +283,6 @@ export function FormRendicion() {
       };
       
       await updateRendicion(id, payload);
-
-      // Clear heavy base64 strings from local state after a successful save
-      const clearedComprobantes = updatedComprobantes.map(c => ({
-        ...c,
-        receiptPhoto: undefined,
-        hasPhoto: c.hasPhoto || !!c.receiptPhoto
-      }));
-      setComprobantes(clearedComprobantes);
 
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -418,6 +418,14 @@ export function FormRendicion() {
         const sumIngresos = ingresos.reduce((sum, ing) => sum + ing.amount, 0);
         const primaryDate = ingresos.length > 0 ? ingresos[0].date : (new Date().toISOString().split('T')[0]);
         
+        // Clear heavy base64 strings from local state IMMEDIATELY to prevent memory bloat and UI lag
+        const clearedComprobantes = updatedComprobantes.map(c => ({
+          ...c,
+          receiptPhoto: undefined,
+          hasPhoto: c.hasPhoto || !!c.receiptPhoto
+        }));
+        setComprobantes(clearedComprobantes);
+
         // Use addRendicion store action! This separates photos and stores them correctly
         const newId = await addRendicion(
           blockName,
@@ -428,14 +436,6 @@ export function FormRendicion() {
           ingresos,
           rendicionType
         );
-        
-        // Clear heavy base64 strings from local state after saving
-        const clearedComprobantes = updatedComprobantes.map(c => ({
-          ...c,
-          receiptPhoto: undefined,
-          hasPhoto: c.hasPhoto || !!c.receiptPhoto
-        }));
-        setComprobantes(clearedComprobantes);
 
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
@@ -546,6 +546,7 @@ export function FormRendicion() {
     try {
       const payload: any = {
         name,
+        rendicionType,
         advanceAmount: sumIngresos,
         advanceDate: primaryDate,
         comprobantes,
@@ -557,7 +558,7 @@ export function FormRendicion() {
       if (isEditing && id) {
         await updateRendicion(id, payload);
       } else {
-        await addRendicion(payload.name, payload.advanceAmount, payload.comprobantes, payload.signature, payload.advanceDate, payload.ingresos);
+        await addRendicion(payload.name, payload.advanceAmount, payload.comprobantes, payload.signature, payload.advanceDate, payload.ingresos, rendicionType);
       }
       setLoading(false);
       setSuccess(true);
