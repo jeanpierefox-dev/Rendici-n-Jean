@@ -128,7 +128,7 @@ export function DashboardUser() {
                         <h3 className="font-bold text-gray-900 truncate text-sm sm:text-base">
                           {rendicion.name}
                         </h3>
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-gray-500">
                           <span className="inline-flex items-center">
                             <Calendar className="w-3.5 h-3.5 mr-1 text-gray-400" />
                             {createdDateFormatted}
@@ -136,6 +136,9 @@ export function DashboardUser() {
                           <span className="inline-flex items-center">
                             <Coins className="w-3.5 h-3.5 mr-1 text-gray-400" />
                             {rendicion.comprobantes.length} comprobantes
+                          </span>
+                          <span className="inline-flex items-center px-1.5 py-0.5 bg-blue-50/70 text-blue-700 text-[10px] font-bold rounded border border-blue-100 uppercase tracking-wide">
+                            {rendicion.rendicionType || 'Logístico'}
                           </span>
                         </div>
                       </div>

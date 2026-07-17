@@ -35,6 +35,7 @@ export interface Rendicion {
   advanceDate?: string; // YYYY-MM-DD or ISO string
   signature?: string; // base64
   ingresos?: Ingreso[];
+  rendicionType?: string;
 }
 
 export interface AppSettings {

@@ -175,7 +175,10 @@ export function DashboardAdmin() {
                       {expandedRow === rendicion.id ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="font-semibold text-gray-900">{rendicion.name}</span>
+                      <div className="font-semibold text-gray-900">{rendicion.name}</div>
+                      <span className="inline-flex items-center px-1.5 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded border border-blue-100 uppercase tracking-wide mt-1">
+                        {rendicion.rendicionType || 'Logístico'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-gray-700">{rendicion.userName}</span>
@@ -260,6 +263,13 @@ export function DashboardAdmin() {
                     <tr className="bg-gray-50/50">
                       <td colSpan={8} className="px-3 md:px-8 py-4 border-b border-gray-200">
                         <div className="pl-3 md:pl-8 border-l-2 border-blue-200">
+                          <div className="flex flex-wrap gap-4 mb-4">
+                            <div className="bg-slate-100/80 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700">
+                              <span className="font-bold text-slate-500 uppercase tracking-wide mr-1.5">Tipo de Rendición:</span>
+                              <span className="font-bold text-slate-900 uppercase">{rendicion.rendicionType || 'Logístico'}</span>
+                            </div>
+                          </div>
+
                           {rendicion.ingresos && rendicion.ingresos.length > 0 && (
                             <div className="mb-6 bg-indigo-50/30 border border-indigo-100/50 rounded-xl p-4 max-w-2xl">
                               <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider mb-2">Detalle de Ingresos (Desembolsos)</h4>

@@ -286,7 +286,7 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
 
   doc.setDrawColor(229, 231, 235);
   doc.setFillColor(255, 255, 255);
-  doc.rect(14, 49, pageWidth - 28, 24, 'FD');
+  doc.rect(14, 49, pageWidth - 28, 30, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
@@ -295,6 +295,7 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   doc.text('COLABORADOR:', 18, 55);
   doc.text('EMPRESA:', 18, 61);
   doc.text('BLOQUE:', 18, 67);
+  doc.text('TIPO RENDICIÓN:', 18, 73);
 
   doc.text('FECHA REGISTRO:', 110, 55);
   doc.text('FECHA LIQUIDACIÓN:', 110, 61);
@@ -302,9 +303,10 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
 
   doc.setFont('helvetica', 'medium');
   doc.setTextColor(31, 41, 55);
-  doc.text(rendicion.userName.toUpperCase(), 45, 55);
-  doc.text(settings.companyName.toUpperCase(), 45, 61);
-  doc.text(rendicion.name, 45, 67);
+  doc.text(rendicion.userName.toUpperCase(), 48, 55);
+  doc.text(settings.companyName.toUpperCase(), 48, 61);
+  doc.text(rendicion.name, 48, 67);
+  doc.text((rendicion.rendicionType || 'Logístico').toUpperCase(), 48, 73);
 
   doc.text(fechaRendicion, 145, 55);
   doc.text(fechaEmision, 145, 61);
@@ -318,49 +320,49 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(30, 58, 138);
-  doc.text('RESUMEN DE CUENTAS (CONSOLIDADO)', 14, 81);
+  doc.text('RESUMEN DE CUENTAS (CONSOLIDADO)', 14, 87);
 
   // Background for box
   doc.setFillColor(249, 250, 251);
   doc.setDrawColor(229, 231, 235);
-  doc.rect(14, 84, pageWidth - 28, 18, 'FD');
+  doc.rect(14, 90, pageWidth - 28, 18, 'FD');
 
   // Values in card
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(75, 85, 99);
-  doc.text('(+) TOTAL RECIBIDO', 20, 91);
-  doc.text('(-) GASTOS COMPROBADOS', 75, 91);
-  doc.text('(=) SALDO RESULTANTE', 135, 91);
+  doc.text('(+) TOTAL RECIBIDO', 20, 97);
+  doc.text('(-) GASTOS COMPROBADOS', 75, 97);
+  doc.text('(=) SALDO RESULTANTE', 135, 97);
 
   doc.setFontSize(11);
   doc.setTextColor(17, 24, 39);
-  doc.text(`S/ ${totalRecibido.toFixed(2)}`, 20, 97);
-  doc.text(`S/ ${totalGastado.toFixed(2)}`, 75, 97);
+  doc.text(`S/ ${totalRecibido.toFixed(2)}`, 20, 103);
+  doc.text(`S/ ${totalGastado.toFixed(2)}`, 75, 103);
 
   // Style Balance based on positive/negative
   if (balance > 0) {
     doc.setTextColor(180, 83, 9); // Amber
     doc.setFont('helvetica', 'bold');
-    doc.text(`S/ ${Math.abs(balance).toFixed(2)}`, 135, 97);
+    doc.text(`S/ ${Math.abs(balance).toFixed(2)}`, 135, 103);
     doc.setFontSize(7);
-    doc.text('(A DEVOLVER A LA EMPRESA)', 135, 100);
+    doc.text('(A DEVOLVER A LA EMPRESA)', 135, 106);
   } else if (balance < 0) {
     doc.setTextColor(29, 78, 216); // Blue
     doc.setFont('helvetica', 'bold');
-    doc.text(`S/ ${Math.abs(balance).toFixed(2)}`, 135, 97);
+    doc.text(`S/ ${Math.abs(balance).toFixed(2)}`, 135, 103);
     doc.setFontSize(7);
-    doc.text('(A REEMBOLSAR AL COLABORADOR)', 135, 100);
+    doc.text('(A REEMBOLSAR AL COLABORADOR)', 135, 106);
   } else {
     doc.setTextColor(4, 120, 87); // Green
     doc.setFont('helvetica', 'bold');
-    doc.text('S/ 0.00', 135, 97);
+    doc.text('S/ 0.00', 135, 103);
     doc.setFontSize(7);
-    doc.text('(CUENTAS SALDADAS)', 135, 100);
+    doc.text('(CUENTAS SALDADAS)', 135, 106);
   }
 
   // TABLES: INGRESOS & EGRESOS
-  let currentY = 108;
+  let currentY = 114;
 
   // Render Ingresos Table if any exist
   if (ingresosList.length > 0) {

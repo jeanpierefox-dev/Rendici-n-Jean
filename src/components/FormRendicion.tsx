@@ -17,6 +17,7 @@ export function FormRendicion() {
 
   // Primary Rendicion fields
   const [name, setName] = useState('');
+  const [rendicionType, setRendicionType] = useState('Logístico');
   const [comprobantes, setComprobantes] = useState<Comprobante[]>([]);
   const [ingresos, setIngresos] = useState<Ingreso[]>([]);
   const [signature, setSignature] = useState<string | undefined>();
@@ -198,6 +199,7 @@ export function FormRendicion() {
       const existing = rendiciones.find(r => r.id === id);
       if (existing) {
         setName(existing.name);
+        setRendicionType(existing.rendicionType || 'Logístico');
         setComprobantes(existing.comprobantes || []);
         setSignature(existing.signature);
         
@@ -230,8 +232,8 @@ export function FormRendicion() {
         return;
       }
       try {
-        // Compress image to 1000x1000 at 0.70 quality for beautiful crisp resolution in PDF but extremely lightweight size
-        const base64 = await compressImageToBase64(file, 1000, 1000, 0.70); 
+        // Compress image to 800x800 at 0.45 quality for extremely fast saving and loading without losing readability
+        const base64 = await compressImageToBase64(file, 800, 800, 0.45); 
         
         const sizeInBytes = base64.length * 0.75;
         if (sizeInBytes > 950 * 1024) {
@@ -264,6 +266,7 @@ export function FormRendicion() {
     try {
       const payload: any = {
         name: name.trim() || 'Sin Nombre',
+        rendicionType,
         advanceAmount: sumIngresos,
         advanceDate: primaryDate,
         comprobantes: updatedComprobantes,
@@ -293,6 +296,21 @@ export function FormRendicion() {
   const handleFieldBlur = () => {
     if (isEditing && id) {
       autoSaveBlock(comprobantes, ingresos, signature);
+    }
+  };
+
+  const handleTypeChange = async (newType: string) => {
+    setRendicionType(newType);
+    if (isEditing && id) {
+      setSaveStatus('saving');
+      try {
+        await updateRendicion(id, { rendicionType: newType });
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch (err: any) {
+        setSaveStatus('error');
+        setErrorMessage(err?.message || 'Error al guardar');
+      }
     }
   };
 
@@ -407,7 +425,8 @@ export function FormRendicion() {
           updatedComprobantes,
           signature,
           primaryDate,
-          ingresos
+          ingresos,
+          rendicionType
         );
         
         // Clear heavy base64 strings from local state after saving
@@ -627,17 +646,33 @@ export function FormRendicion() {
 
       {/* BLOCK NAME GENERAL INFO */}
       <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-6">
-        <div>
-          <label className="block text-sm font-semibold text-gray-800 mb-2">Nombre o Glosa de este Bloque</label>
-          <input 
-            type="text" 
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={handleFieldBlur}
-            placeholder="Ej. Viaje a Lima - Enero 2024"
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base font-medium"
-            required
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-semibold text-gray-800 mb-2">Nombre o Glosa de este Bloque</label>
+            <input 
+              type="text" 
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={handleFieldBlur}
+              placeholder="Ej. Viaje a Lima - Enero 2024"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base font-medium"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-800 mb-2">Tipo de Rendición</label>
+            <select
+              value={rendicionType}
+              onChange={(e) => handleTypeChange(e.target.value)}
+              onBlur={handleFieldBlur}
+              className="w-full px-4 py-2 border border-gray-300 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-base font-medium"
+            >
+              <option value="Logístico">Logístico</option>
+              <option value="Despacho pollo vivo pucallpa">Despacho pollo vivo Pucallpa</option>
+              <option value="Despacho pollo vivo San Fernando">Despacho pollo vivo San Fernando</option>
+              <option value="Otros">Otros</option>
+            </select>
+          </div>
         </div>
       </div>
 
