@@ -6,9 +6,9 @@ import { es } from 'date-fns/locale';
 import { 
   FolderOpen, PlusCircle, Clock, CheckCircle2, XCircle, 
   FileText, ChevronDown, ChevronUp, Calendar, Pencil, 
-  Coins, Landmark, AlertCircle, ArrowRight, Loader2
+  Coins, Landmark, AlertCircle, ArrowRight, Loader2, Paperclip
 } from 'lucide-react';
-import { exportToPDF, exportSingleRendicionPDF } from '../lib/export';
+import { exportToPDF, exportSingleRendicionPDF, exportRendicionReceiptsPDF } from '../lib/export';
 
 export function DashboardUser() {
   const { rendiciones, currentUser, settings } = useAppStore();
@@ -244,34 +244,65 @@ export function DashboardUser() {
                               Editar / Agregar Comprobantes
                             </Link>
 
-                            {/* Download PDF Button */}
-                            <button
-                              onClick={async () => {
-                                setGeneratingPdfId(rendicion.id);
-                                try {
-                                  await exportSingleRendicionPDF(rendicion, settings);
-                                } catch (err) {
-                                  console.error(err);
-                                  alert('Error al generar el reporte PDF.');
-                                } finally {
-                                  setGeneratingPdfId(null);
-                                }
-                              }}
-                              disabled={generatingPdfId === rendicion.id}
-                              className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2 disabled:opacity-50"
-                            >
-                              {generatingPdfId === rendicion.id ? (
-                                <>
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                                  Generando PDF...
-                                </>
-                              ) : (
-                                <>
-                                  <FileText className="w-3.5 h-3.5 text-blue-600" />
-                                  Descargar Reporte (PDF)
-                                </>
-                              )}
-                            </button>
+                             {/* Download PDF Button */}
+                             <button
+                               onClick={async () => {
+                                 setGeneratingPdfId(rendicion.id);
+                                 try {
+                                   await exportSingleRendicionPDF(rendicion, settings, false);
+                                 } catch (err) {
+                                   console.error(err);
+                                   alert('Error al generar el reporte PDF.');
+                                 } finally {
+                                   setGeneratingPdfId(null);
+                                 }
+                               }}
+                               disabled={generatingPdfId !== null}
+                               className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2 disabled:opacity-50"
+                             >
+                               {generatingPdfId === rendicion.id ? (
+                                 <>
+                                   <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                                   Generando PDF...
+                                 </>
+                               ) : (
+                                 <>
+                                   <FileText className="w-3.5 h-3.5 text-blue-600" />
+                                   Descargar Reporte (PDF)
+                                 </>
+                               )}
+                             </button>
+
+                             {/* Download Receipts Button */}
+                             {rendicion.comprobantes.some(c => c.hasPhoto || c.receiptPhoto) && (
+                               <button
+                                 onClick={async () => {
+                                   setGeneratingPdfId(rendicion.id + '-receipts');
+                                   try {
+                                     await exportRendicionReceiptsPDF(rendicion, settings);
+                                   } catch (err: any) {
+                                     console.error(err);
+                                     alert(err?.message || 'Error al descargar los recibos.');
+                                   } finally {
+                                     setGeneratingPdfId(null);
+                                   }
+                                 }}
+                                 disabled={generatingPdfId !== null}
+                                 className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2 disabled:opacity-50"
+                               >
+                                 {generatingPdfId === rendicion.id + '-receipts' ? (
+                                   <>
+                                     <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                                     Generando Recibos...
+                                   </>
+                                 ) : (
+                                   <>
+                                     <Paperclip className="w-3.5 h-3.5 text-indigo-600" />
+                                     Descargar Recibos Adjuntos
+                                   </>
+                                 )}
+                               </button>
+                             )}
                           </div>
                         </div>
                       </div>

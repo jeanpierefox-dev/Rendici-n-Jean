@@ -139,7 +139,7 @@ const getImageDimensions = (base64Str: string): Promise<{ width: number; height:
   });
 };
 
-export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
+export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = false) => {
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
     if (!c.receiptPhoto && c.id) {
@@ -469,7 +469,7 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   // PAGE 2+: ATTACHED RECEIPT IMAGES (ANNEXES)
   const comprobantesConFoto = rendicion.comprobantes.filter(c => c.receiptPhoto);
   
-  if (comprobantesConFoto.length > 0) {
+  if (conHojaFedatada && comprobantesConFoto.length > 0) {
     for (let idx = 0; idx < comprobantesConFoto.length; idx++) {
       const c = comprobantesConFoto[idx];
       doc.addPage();
@@ -623,4 +623,208 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   // Save the document named specifically based on user name & block name
   const sanitizedBlockName = rendicion.name.replace(/[^a-zA-Z0-9]/g, '_');
   doc.save(`Rendicion_${sanitizedBlockName}_${rendicion.userName.replace(' ', '_')}.pdf`);
+};
+
+export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, settings: AppSettings) => {
+  // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
+  const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
+    if (!c.receiptPhoto && c.id) {
+      try {
+        const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', c.id));
+        const data = photoDoc.data() as any;
+        if (photoDoc.exists() && data?.photo) {
+          return { ...c, receiptPhoto: data.photo };
+        }
+      } catch (err) {
+        console.error("Could not fetch missing receipt photo for PDF:", err);
+      }
+    }
+    return c;
+  }));
+
+  // Update store ONCE in one single batch!
+  const hasNewPhotos = updatedComprobantes.some((c, i) => c.receiptPhoto !== storeRendicion.comprobantes[i].receiptPhoto);
+  if (hasNewPhotos) {
+    useAppStore.setState(state => ({
+      rendiciones: state.rendiciones.map(r => r.id === storeRendicion.id ? {
+        ...r,
+        comprobantes: updatedComprobantes
+      } : r)
+    }));
+  }
+
+  // Create a safe, copy of the rendicion object to avoid mutating frozen store objects
+  const rendicion: Rendicion = {
+    ...storeRendicion,
+    comprobantes: updatedComprobantes
+  };
+
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  
+  // Pre-load all attached image dimensions asynchronously
+  const imageDimensions: { [key: string]: { width: number; height: number } } = {};
+  for (const c of rendicion.comprobantes) {
+    if (c.receiptPhoto) {
+      try {
+        const key = c.id || c.documentNumber;
+        const dims = await getImageDimensions(c.receiptPhoto);
+        imageDimensions[key] = dims;
+      } catch (err) {
+        console.error("Could not load image dimensions", err);
+      }
+    }
+  }
+
+  const comprobantesConFoto = rendicion.comprobantes.filter(c => c.receiptPhoto);
+  
+  if (comprobantesConFoto.length === 0) {
+    throw new Error("No hay recibos adjuntos (con foto) en esta rendición.");
+  }
+
+  // Draw receipts as Hoja Fedatada
+  for (let idx = 0; idx < comprobantesConFoto.length; idx++) {
+    const c = comprobantesConFoto[idx];
+    if (idx > 0) {
+      doc.addPage();
+    }
+    
+    // Page elegant frame
+    doc.setDrawColor(30, 58, 138);
+    doc.setLineWidth(0.5);
+    doc.rect(8, 8, pageWidth - 16, doc.internal.pageSize.getHeight() - 16);
+    
+    doc.setDrawColor(229, 231, 235);
+    doc.setLineWidth(0.3);
+    doc.rect(10, 10, pageWidth - 20, doc.internal.pageSize.getHeight() - 20);
+    
+    // Header for Annex
+    doc.setFillColor(243, 244, 246);
+    doc.rect(12, 12, pageWidth - 24, 22, 'F');
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(30, 58, 138);
+    doc.text(`HOJA FEDATADA - ANEXO N° ${idx + 1}`, 16, 20);
+    
+    doc.setFontSize(7.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text(`Bloque: ${rendicion.name} | Colaborador: ${rendicion.userName}`, 16, 26);
+    
+    // Invoice summary on the right of the header
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(31, 41, 55);
+    doc.text(`${c.type} N° ${c.documentNumber}`, pageWidth - 16, 19, { align: 'right' });
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(75, 85, 99);
+    doc.text(`RUC: ${c.ruc}  |  Fecha: ${formatLocalDate(c.date)}  |  Monto: S/ ${c.amount.toFixed(2)}`, pageWidth - 16, 25, { align: 'right' });
+    
+    // Draw a line separator
+    doc.setDrawColor(209, 213, 219);
+    doc.line(12, 34, pageWidth - 12, 34);
+
+    // --- LEFT SIDE: PHYSICAL RECEIPT PASTING BOX ---
+    const boxX = 14;
+    const boxY = 40;
+    const boxW = 86;
+    const boxH = 236;
+
+    doc.setDrawColor(156, 163, 175); // light gray border
+    doc.setLineWidth(0.3);
+    doc.setLineDashPattern([2, 2], 0); // dashed line
+    doc.setFillColor(253, 253, 253); // extremely light gray background for pasting
+    doc.rect(boxX, boxY, boxW, boxH, 'FD');
+    doc.setLineDashPattern([], 0); // reset to solid lines
+
+    const boxCenterX = boxX + (boxW / 2);
+    const boxCenterY = boxY + (boxH / 2);
+
+    // Paste text labels inside the box
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(156, 163, 175); // gray-400
+    doc.text('PEGAR COMPROBANTE', boxCenterX, boxCenterY - 15, { align: 'center' });
+    doc.text('ORIGINAL AQUÍ', boxCenterX, boxCenterY - 9, { align: 'center' });
+
+    // Visual helper
+    doc.setLineWidth(0.3);
+    doc.setDrawColor(209, 213, 219);
+    doc.setLineDashPattern([1, 1], 0);
+    doc.rect(boxCenterX - 18, boxCenterY + 4, 36, 24);
+    doc.setLineDashPattern([], 0);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(156, 163, 175);
+    doc.text('Original Físico', boxCenterX, boxCenterY + 16, { align: 'center' });
+
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(156, 163, 175);
+    doc.text('(Sujete firmemente con cinta o goma)', boxCenterX, boxCenterY + 40, { align: 'center' });
+    doc.text('Ancho máx: 82 mm', boxCenterX, boxCenterY + 45, { align: 'center' });
+
+    // --- RIGHT SIDE: COMPLETE ATTACHED DIGITAL IMAGE ---
+    const imgMaxW = 92;
+    const imgMaxH = 236;
+    const imgColX = 104;
+    const imgColY = 40;
+
+    if (c.receiptPhoto) {
+      try {
+        let formatType = 'JPEG';
+        if (c.receiptPhoto.startsWith('data:image/png')) {
+          formatType = 'PNG';
+        } else if (c.receiptPhoto.startsWith('data:image/gif')) {
+          formatType = 'GIF';
+        }
+        
+        const key = c.id || c.documentNumber;
+        const dims = imageDimensions[key];
+        let origW = 0;
+        let origH = 0;
+        if (dims) {
+          origW = dims.width;
+          origH = dims.height;
+        }
+
+        let finalW = imgMaxW;
+        let finalH = imgMaxH;
+
+        if (origW > 0 && origH > 0) {
+          const ratio = origW / origH;
+          const containerRatio = imgMaxW / imgMaxH;
+          
+          if (ratio > containerRatio) {
+            finalW = imgMaxW;
+            finalH = imgMaxW / ratio;
+          } else {
+            finalH = imgMaxH;
+            finalW = imgMaxH * ratio;
+          }
+        }
+
+        const imgX = imgColX + (imgMaxW - finalW) / 2;
+        const imgY = imgColY + (imgMaxH - finalH) / 2;
+        
+        doc.addImage(c.receiptPhoto, formatType, imgX, imgY, finalW, finalH, undefined, 'FAST');
+
+        doc.setDrawColor(229, 231, 235);
+        doc.setLineWidth(0.2);
+        doc.rect(imgX, imgY, finalW, finalH);
+      } catch (imgError) {
+        console.error("Could not render receipt image in PDF", imgError);
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8.5);
+        doc.setTextColor(220, 38, 38);
+        doc.text("No se pudo renderizar la copia digital.", imgColX + (imgMaxW / 2), 120, { align: 'center' });
+      }
+    }
+  }
+
+  const sanitizedBlockName = rendicion.name.replace(/[^a-zA-Z0-9]/g, '_');
+  doc.save(`Recibos_${sanitizedBlockName}_${rendicion.userName.replace(' ', '_')}.pdf`);
 };
