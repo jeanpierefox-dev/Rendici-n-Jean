@@ -71,6 +71,9 @@ export const useAppStore = create<AppState>()(
         const uploadPromises: Promise<void>[] = [];
         const comprobantesToSave = newRendicion.comprobantes.map((c: any) => {
           const compCopy = { ...c };
+          if (!compCopy.id) {
+            compCopy.id = safeUUID();
+          }
           if (compCopy.receiptPhoto) {
             const photoVal = compCopy.receiptPhoto;
             const docId = compCopy.id;
@@ -81,6 +84,8 @@ export const useAppStore = create<AppState>()(
                 })
             );
             delete compCopy.receiptPhoto;
+            compCopy.hasPhoto = true;
+          } else if (c.receiptPhoto || c.hasPhoto) {
             compCopy.hasPhoto = true;
           }
           return compCopy;
@@ -137,6 +142,9 @@ export const useAppStore = create<AppState>()(
           const uploadPromises: Promise<void>[] = [];
           comprobantesToSave = updateData.comprobantes.map((c: any) => {
             const compCopy = { ...c };
+            if (!compCopy.id) {
+              compCopy.id = safeUUID();
+            }
             if (compCopy.receiptPhoto) {
               const photoVal = compCopy.receiptPhoto;
               const docId = compCopy.id;
@@ -147,6 +155,8 @@ export const useAppStore = create<AppState>()(
                   })
               );
               delete compCopy.receiptPhoto;
+              compCopy.hasPhoto = true;
+            } else if (c.receiptPhoto || c.hasPhoto) {
               compCopy.hasPhoto = true;
             }
             return compCopy;

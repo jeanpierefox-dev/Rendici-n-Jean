@@ -19,18 +19,30 @@ export function DashboardAdmin() {
 
   const handleViewPhoto = async (c: Comprobante, rendicionId: string) => {
     if (c.receiptPhoto) {
-      setSelectedImage(c.receiptPhoto);
+      let photo = c.receiptPhoto;
+      if (!photo.startsWith('data:')) {
+        photo = 'data:image/jpeg;base64,' + photo;
+      }
+      setSelectedImage(photo);
     } else {
-      setLoadingPhotoId(c.id);
+      const compId = c.id;
+      if (!compId) {
+        alert('Este comprobante no posee identificador único para consultar el archivo adjunto.');
+        return;
+      }
+      setLoadingPhotoId(compId);
       try {
-        const docSnap = await getDoc(doc(db, 'receipt_photos', c.id));
-        if (docSnap.exists() && docSnap.data().photo) {
-          const photo = docSnap.data().photo;
+        const docSnap = await getDoc(doc(db, 'receipt_photos', compId));
+        if (docSnap.exists() && docSnap.data()?.photo) {
+          let photo = docSnap.data().photo;
+          if (!photo.startsWith('data:')) {
+            photo = 'data:image/jpeg;base64,' + photo;
+          }
           // Update the store's state so it's cached in memory!
           useAppStore.setState(state => ({
             rendiciones: state.rendiciones.map(r => r.id === rendicionId ? {
               ...r,
-              comprobantes: r.comprobantes.map(comp => comp.id === c.id ? { ...comp, receiptPhoto: photo } : comp)
+              comprobantes: r.comprobantes.map(comp => (comp.id === compId || comp.documentNumber === c.documentNumber) ? { ...comp, receiptPhoto: photo, hasPhoto: true } : comp)
             } : r)
           }));
           setSelectedImage(photo);
@@ -490,16 +502,35 @@ export function DashboardAdmin() {
         </div>
       </div>
 
-      {/* Image Modal */}
+      {/* Image / Attachment Modal */}
       {selectedImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/80" onClick={() => setSelectedImage(null)}>
-          <div className="bg-white p-2 rounded-xl max-w-4xl max-h-[90vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-end p-2">
-              <button onClick={() => setSelectedImage(null)} className="p-1 text-gray-500 hover:bg-gray-100 rounded-full">
-                <X className="w-6 h-6" />
-              </button>
+          <div className="bg-white p-4 rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+              <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                <Paperclip className="w-4 h-4 text-blue-600" /> Archivo Adjunto del Comprobante
+              </h3>
+              <div className="flex items-center gap-2">
+                <a
+                  href={selectedImage}
+                  download="comprobante_adjunto"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> Descargar Archivo
+                </a>
+                <button onClick={() => setSelectedImage(null)} className="p-1 text-gray-500 hover:bg-gray-100 rounded-full">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-            <img src={selectedImage} alt="Comprobante ampliado" className="w-full h-auto max-h-[75vh] object-contain rounded-lg" />
+            
+            <div className="flex-1 overflow-auto flex items-center justify-center min-h-[300px]">
+              {selectedImage.startsWith('data:application/pdf') ? (
+                <iframe src={selectedImage} title="PDF Adjunto" className="w-full h-[70vh] rounded-lg border border-gray-200" />
+              ) : (
+                <img src={selectedImage} alt="Comprobante ampliado" className="w-full h-auto max-h-[72vh] object-contain rounded-lg" />
+              )}
+            </div>
           </div>
         </div>
       )}

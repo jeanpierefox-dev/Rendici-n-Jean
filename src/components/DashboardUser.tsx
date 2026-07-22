@@ -6,14 +6,61 @@ import { es } from 'date-fns/locale';
 import { 
   FolderOpen, PlusCircle, Clock, CheckCircle2, XCircle, 
   FileText, ChevronDown, ChevronUp, Calendar, Pencil, 
-  Coins, Landmark, AlertCircle, ArrowRight, Loader2, Paperclip
+  Coins, Landmark, AlertCircle, ArrowRight, Loader2, Paperclip,
+  Eye, Download, X
 } from 'lucide-react';
 import { exportToPDF, exportSingleRendicionPDF, exportRendicionReceiptsPDF } from '../lib/export';
+import { Comprobante } from '../types';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { formatLocalDate } from '../lib/utils';
 
 export function DashboardUser() {
   const { rendiciones, currentUser, settings } = useAppStore();
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null);
+
+  const handleViewPhoto = async (c: Comprobante, rendicionId: string) => {
+    if (c.receiptPhoto) {
+      let photo = c.receiptPhoto;
+      if (!photo.startsWith('data:')) {
+        photo = 'data:image/jpeg;base64,' + photo;
+      }
+      setSelectedImage(photo);
+    } else {
+      const compId = c.id;
+      if (!compId) {
+        alert('Este comprobante no posee identificador único para consultar el archivo adjunto.');
+        return;
+      }
+      setLoadingPhotoId(compId);
+      try {
+        const docSnap = await getDoc(doc(db, 'receipt_photos', compId));
+        if (docSnap.exists() && docSnap.data()?.photo) {
+          let photo = docSnap.data().photo;
+          if (!photo.startsWith('data:')) {
+            photo = 'data:image/jpeg;base64,' + photo;
+          }
+          useAppStore.setState(state => ({
+            rendiciones: state.rendiciones.map(r => r.id === rendicionId ? {
+              ...r,
+              comprobantes: r.comprobantes.map(comp => (comp.id === compId || comp.documentNumber === c.documentNumber) ? { ...comp, receiptPhoto: photo, hasPhoto: true } : comp)
+            } : r)
+          }));
+          setSelectedImage(photo);
+        } else {
+          alert('No se encontró el archivo adjunto en la base de datos o el bloque fue guardado sin imagen.');
+        }
+      } catch (err) {
+        console.error("Error fetching photo:", err);
+        alert('Error al descargar el archivo adjunto.');
+      } finally {
+        setLoadingPhotoId(null);
+      }
+    }
+  };
 
   // Filter only current user's rendiciones
   const myRendiciones = rendiciones.filter(r => r.userId === currentUser.id);
@@ -221,6 +268,62 @@ export function DashboardUser() {
                               </span>
                             </div>
                           </div>
+
+                          {/* Detailed Comprobantes Table */}
+                          {rendicion.comprobantes && rendicion.comprobantes.length > 0 && (
+                            <div className="mt-4 border-t border-gray-100 pt-4">
+                              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                Lista de Comprobantes Registrados
+                              </h4>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs min-w-[500px]">
+                                  <thead>
+                                    <tr className="text-gray-500 border-b border-gray-200">
+                                      <th className="pb-2 font-medium">Fecha</th>
+                                      <th className="pb-2 font-medium">Documento</th>
+                                      <th className="pb-2 font-medium">RUC / Proveedor</th>
+                                      <th className="pb-2 font-medium">Monto</th>
+                                      <th className="pb-2 font-medium text-right">Adjunto</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100">
+                                    {rendicion.comprobantes.map((c, i) => (
+                                      <tr key={c.id || i}>
+                                        <td className="py-2 text-gray-600">{formatLocalDate(c.date)}</td>
+                                        <td className="py-2 text-gray-900 font-medium">{c.type} {c.documentNumber}</td>
+                                        <td className="py-2 text-gray-600">
+                                          <span className="font-semibold">{c.ruc}</span>
+                                          {c.razonSocial && <span className="block text-[10px] text-gray-400 truncate max-w-[140px]">{c.razonSocial}</span>}
+                                        </td>
+                                        <td className="py-2 text-gray-900 font-bold">S/ {c.amount.toFixed(2)}</td>
+                                        <td className="py-2 text-right">
+                                          {c.receiptPhoto || c.hasPhoto ? (
+                                            <button 
+                                              onClick={() => handleViewPhoto(c, rendicion.id)}
+                                              disabled={loadingPhotoId === c.id}
+                                              className="inline-flex items-center text-blue-600 hover:text-blue-800 text-xs font-semibold disabled:opacity-50 cursor-pointer"
+                                            >
+                                              {loadingPhotoId === c.id ? (
+                                                <>
+                                                  <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Cargando...
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Eye className="w-3.5 h-3.5 mr-1" /> Ver Adjunto
+                                                </>
+                                              )}
+                                            </button>
+                                          ) : (
+                                            <span className="text-gray-400 text-xs italic">Sin adjunto</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* Fast Actions panel */}
@@ -314,6 +417,39 @@ export function DashboardUser() {
           </div>
         )}
       </div>
+
+      {/* Attachment Viewer Modal */}
+      {selectedImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/80" onClick={() => setSelectedImage(null)}>
+          <div className="bg-white p-4 rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+              <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                <Paperclip className="w-4 h-4 text-blue-600" /> Archivo Adjunto del Comprobante
+              </h3>
+              <div className="flex items-center gap-2">
+                <a
+                  href={selectedImage}
+                  download="comprobante_adjunto"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> Descargar Archivo
+                </a>
+                <button onClick={() => setSelectedImage(null)} className="p-1 text-gray-500 hover:bg-gray-100 rounded-full">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-auto flex items-center justify-center min-h-[300px]">
+              {selectedImage.startsWith('data:application/pdf') ? (
+                <iframe src={selectedImage} title="PDF Adjunto" className="w-full h-[70vh] rounded-lg border border-gray-200" />
+              ) : (
+                <img src={selectedImage} alt="Comprobante ampliado" className="w-full h-auto max-h-[72vh] object-contain rounded-lg" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
