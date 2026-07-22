@@ -3,7 +3,7 @@ import { useAppStore } from '../lib/store';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { exportToPDF, exportToExcel, exportSingleRendicionPDF, exportRendicionReceiptsPDF } from '../lib/export';
+import { exportToPDF, exportToExcel, exportSingleRendicionPDF } from '../lib/export';
 import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp, FileText, ShieldCheck, Trash2, Loader2, Paperclip } from 'lucide-react';
 import { Rendicion, Comprobante } from '../types';
 import { doc, getDoc } from 'firebase/firestore';
@@ -242,7 +242,7 @@ export function DashboardAdmin() {
                           onClick={async () => {
                             setGeneratingPdfId(rendicion.id);
                             try {
-                              await exportSingleRendicionPDF(rendicion, settings, false);
+                              await exportSingleRendicionPDF(rendicion, settings, true);
                             } catch (err) {
                               console.error(err);
                               alert('Error al generar el reporte PDF.');
@@ -252,7 +252,7 @@ export function DashboardAdmin() {
                           }}
                           disabled={generatingPdfId !== null}
                           className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer disabled:opacity-50"
-                          title="Descargar Reporte (PDF)"
+                          title="Descargar Reporte Completo con Comprobantes (PDF)"
                         >
                           {generatingPdfId === rendicion.id ? (
                             <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
@@ -260,30 +260,6 @@ export function DashboardAdmin() {
                             <Download className="w-5 h-5" />
                           )}
                         </button>
-                        {rendicion.comprobantes.some(c => c.hasPhoto || c.receiptPhoto) && (
-                          <button 
-                            onClick={async () => {
-                              setGeneratingPdfId(rendicion.id + '-receipts');
-                              try {
-                                await exportRendicionReceiptsPDF(rendicion, settings);
-                              } catch (err: any) {
-                                console.error(err);
-                                alert(err?.message || 'Error al descargar los recibos.');
-                              } finally {
-                                setGeneratingPdfId(null);
-                              }
-                            }}
-                            disabled={generatingPdfId !== null}
-                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer disabled:opacity-50"
-                            title="Descargar Recibos Adjuntos"
-                          >
-                            {generatingPdfId === rendicion.id + '-receipts' ? (
-                              <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
-                            ) : (
-                              <Paperclip className="w-5 h-5" />
-                            )}
-                          </button>
-                        )}
                         <button 
                           onClick={() => handleDelete(rendicion.id, rendicion.name)}
                           className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
@@ -420,7 +396,7 @@ export function DashboardAdmin() {
                               onClick={async () => {
                                 setGeneratingPdfId(rendicion.id);
                                 try {
-                                  await exportSingleRendicionPDF(rendicion, settings, false);
+                                  await exportSingleRendicionPDF(rendicion, settings, true);
                                 } catch (err) {
                                   console.error(err);
                                   alert('Error al generar el reporte PDF.');
@@ -430,7 +406,7 @@ export function DashboardAdmin() {
                               }}
                               disabled={generatingPdfId !== null}
                               className="inline-flex items-center px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-blue-200/50 disabled:opacity-50"
-                              title="Descargar Reporte de Liquidación de Gastos"
+                              title="Descargar Reporte Completo de Liquidación de Gastos con Comprobantes"
                             >
                               {generatingPdfId === rendicion.id ? (
                                 <>
@@ -444,37 +420,6 @@ export function DashboardAdmin() {
                                 </>
                               )}
                             </button>
-
-                            {rendicion.comprobantes.some(c => c.hasPhoto || c.receiptPhoto) && (
-                              <button
-                                onClick={async () => {
-                                  setGeneratingPdfId(rendicion.id + '-receipts');
-                                  try {
-                                    await exportRendicionReceiptsPDF(rendicion, settings);
-                                  } catch (err: any) {
-                                    console.error(err);
-                                    alert(err?.message || 'Error al descargar los recibos.');
-                                  } finally {
-                                    setGeneratingPdfId(null);
-                                  }
-                                }}
-                                disabled={generatingPdfId !== null}
-                                className="inline-flex items-center px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-indigo-200/50 disabled:opacity-50"
-                                title="Descargar Recibos Adjuntos en otro PDF"
-                              >
-                                {generatingPdfId === rendicion.id + '-receipts' ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                                    Generando Recibos...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Paperclip className="w-4 h-4 text-indigo-600" />
-                                    Descargar Recibos Adjuntos
-                                  </>
-                                )}
-                              </button>
-                            )}
                             <button
                               onClick={() => handleDelete(rendicion.id, rendicion.name)}
                               className="inline-flex items-center px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-red-200/50"

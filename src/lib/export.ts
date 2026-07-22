@@ -139,7 +139,7 @@ const getImageDimensions = (base64Str: string): Promise<{ width: number; height:
   });
 };
 
-export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = false) => {
+export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
     let photo = c.receiptPhoto;
@@ -562,60 +562,85 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
       const imgColY = 40;
 
       // Add receipt photo image centered in the space
-      if (c.receiptPhoto) {
-        try {
-          let formatType = 'JPEG';
-          if (c.receiptPhoto.startsWith('data:image/png')) {
-            formatType = 'PNG';
-          } else if (c.receiptPhoto.startsWith('data:image/gif')) {
-            formatType = 'GIF';
-          }
-          
-          // Get loaded dimensions (or default to max if missing)
-          const key = c.id || c.documentNumber;
-          const dims = imageDimensions[key];
-          let origW = 0;
-          let origH = 0;
-          if (dims) {
-            origW = dims.width;
-            origH = dims.height;
-          }
+      let photoSrc = c.receiptPhoto;
+      if (photoSrc && !photoSrc.startsWith('data:')) {
+        photoSrc = 'data:image/jpeg;base64,' + photoSrc;
+      }
 
-          let finalW = imgMaxW;
-          let finalH = imgMaxH;
+      if (photoSrc) {
+        if (photoSrc.startsWith('data:application/pdf')) {
+          doc.setFillColor(243, 244, 246);
+          doc.rect(imgColX, imgColY, imgMaxW, 100, 'F');
+          doc.setDrawColor(209, 213, 219);
+          doc.rect(imgColX, imgColY, imgMaxW, 100);
 
-          if (origW > 0 && origH > 0) {
-            const ratio = origW / origH;
-            const containerRatio = imgMaxW / imgMaxH;
-            
-            if (ratio > containerRatio) {
-              // Width is limiting
-              finalW = imgMaxW;
-              finalH = imgMaxW / ratio;
-            } else {
-              // Height is limiting
-              finalH = imgMaxH;
-              finalW = imgMaxH * ratio;
-            }
-          }
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.setTextColor(30, 58, 138);
+          doc.text("DOCUMENTO ADJUNTO EN PDF", imgColX + (imgMaxW / 2), imgColY + 30, { align: 'center' });
 
-          // Center the image inside the right side column's slot
-          const imgX = imgColX + (imgMaxW - finalW) / 2;
-          const imgY = imgColY + (imgMaxH - finalH) / 2;
-          
-          doc.addImage(c.receiptPhoto, formatType, imgX, imgY, finalW, finalH, undefined, 'FAST');
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(75, 85, 99);
+          doc.text(`Documento: ${c.type} N° ${c.documentNumber}`, imgColX + (imgMaxW / 2), imgColY + 45, { align: 'center' });
+          doc.text(`RUC: ${c.ruc}`, imgColX + (imgMaxW / 2), imgColY + 53, { align: 'center' });
+          doc.text(`Monto: S/ ${c.amount.toFixed(2)}`, imgColX + (imgMaxW / 2), imgColY + 61, { align: 'center' });
 
-          // Draw a fine border around the digital image copy to keep it polished
-          doc.setDrawColor(229, 231, 235);
-          doc.setLineWidth(0.2);
-          doc.rect(imgX, imgY, finalW, finalH);
-        } catch (imgError) {
-          console.error("Could not render receipt image in PDF", imgError);
           doc.setFont('helvetica', 'italic');
-          doc.setFontSize(8.5);
-          doc.setTextColor(220, 38, 38);
-          doc.text("No se pudo renderizar la copia digital.", imgColX + (imgMaxW / 2), 120, { align: 'center' });
-          doc.text("La imagen original se conserva en el sistema.", imgColX + (imgMaxW / 2), 125, { align: 'center' });
+          doc.setFontSize(7.5);
+          doc.setTextColor(107, 114, 128);
+          doc.text("El archivo PDF original se encuentra", imgColX + (imgMaxW / 2), imgColY + 75, { align: 'center' });
+          doc.text("adjunto y guardado en la plataforma.", imgColX + (imgMaxW / 2), imgColY + 81, { align: 'center' });
+        } else {
+          try {
+            let formatType = 'JPEG';
+            if (photoSrc.startsWith('data:image/png')) {
+              formatType = 'PNG';
+            } else if (photoSrc.startsWith('data:image/gif')) {
+              formatType = 'GIF';
+            }
+            
+            const key = c.id || c.documentNumber;
+            const dims = imageDimensions[key];
+            let origW = 0;
+            let origH = 0;
+            if (dims) {
+              origW = dims.width;
+              origH = dims.height;
+            }
+
+            let finalW = imgMaxW;
+            let finalH = imgMaxH;
+
+            if (origW > 0 && origH > 0) {
+              const ratio = origW / origH;
+              const containerRatio = imgMaxW / imgMaxH;
+              
+              if (ratio > containerRatio) {
+                finalW = imgMaxW;
+                finalH = imgMaxW / ratio;
+              } else {
+                finalH = imgMaxH;
+                finalW = imgMaxH * ratio;
+              }
+            }
+
+            const imgX = imgColX + (imgMaxW - finalW) / 2;
+            const imgY = imgColY + (imgMaxH - finalH) / 2;
+            
+            doc.addImage(photoSrc, formatType, imgX, imgY, finalW, finalH, undefined, 'FAST');
+
+            doc.setDrawColor(229, 231, 235);
+            doc.setLineWidth(0.2);
+            doc.rect(imgX, imgY, finalW, finalH);
+          } catch (imgError) {
+            console.error("Could not render receipt image in PDF", imgError);
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(8.5);
+            doc.setTextColor(220, 38, 38);
+            doc.text("No se pudo renderizar la copia digital.", imgColX + (imgMaxW / 2), 120, { align: 'center' });
+            doc.text("La imagen original se conserva en el sistema.", imgColX + (imgMaxW / 2), 125, { align: 'center' });
+          }
         }
       }
     }
