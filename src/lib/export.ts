@@ -143,16 +143,22 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
     let photo = c.receiptPhoto;
-    if (!photo && c.id) {
-      try {
-        const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', c.id));
-        const data = photoDoc.data() as any;
-        if (photoDoc.exists() && data?.photo) {
-          photo = data.photo;
+    if (!photo) {
+      const compId = c.id || c.documentNumber;
+      if (compId) {
+        try {
+          const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', compId));
+          const data = photoDoc.data() as any;
+          if (photoDoc.exists() && data?.photo) {
+            photo = data.photo;
+          }
+        } catch (err) {
+          console.error("Could not fetch missing receipt photo for PDF:", err);
         }
-      } catch (err) {
-        console.error("Could not fetch missing receipt photo for PDF:", err);
       }
+    }
+    if (photo && !photo.startsWith('data:')) {
+      photo = 'data:image/jpeg;base64,' + photo;
     }
     return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
   }));
@@ -468,11 +474,11 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   doc.text(`Fecha de Control: ${fechaEmision.split(' ')[0]}`, pageWidth - 85, lineY + 12);
 
   // PAGE 2+: ATTACHED RECEIPT IMAGES (ANNEXES)
-  const comprobantesConFoto = rendicion.comprobantes.filter(c => c.receiptPhoto);
+  const comprobantesAnexos = rendicion.comprobantes;
   
-  if (conHojaFedatada && comprobantesConFoto.length > 0) {
-    for (let idx = 0; idx < comprobantesConFoto.length; idx++) {
-      const c = comprobantesConFoto[idx];
+  if (conHojaFedatada && comprobantesAnexos.length > 0) {
+    for (let idx = 0; idx < comprobantesAnexos.length; idx++) {
+      const c = comprobantesAnexos[idx];
       doc.addPage();
       
       // Page elegant frame
