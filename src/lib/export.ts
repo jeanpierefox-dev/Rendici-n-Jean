@@ -139,21 +139,82 @@ const getImageDimensions = (base64Str: string): Promise<{ width: number; height:
   });
 };
 
+const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; format: 'JPEG' | 'PNG'; width: number; height: number }> => {
+  return new Promise((resolve) => {
+    if (!base64Str) {
+      resolve({ dataUrl: '', format: 'JPEG', width: 0, height: 0 });
+      return;
+    }
+    let src = base64Str.trim();
+    if (!src.startsWith('data:')) {
+      src = 'data:image/jpeg;base64,' + src;
+    }
+
+    if (src.startsWith('data:application/pdf')) {
+      resolve({ dataUrl: src, format: 'JPEG', width: 0, height: 0 });
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth || img.width || 800;
+        const h = img.naturalHeight || img.height || 1000;
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0);
+          const converted = canvas.toDataURL('image/jpeg', 0.92);
+          resolve({
+            dataUrl: converted,
+            format: 'JPEG',
+            width: w,
+            height: h
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn("Canvas conversion failed, using original src", err);
+      }
+      resolve({
+        dataUrl: src,
+        format: src.includes('png') ? 'PNG' : 'JPEG',
+        width: img.naturalWidth || 0,
+        height: img.naturalHeight || 0
+      });
+    };
+    img.onerror = () => {
+      resolve({
+        dataUrl: src,
+        format: src.includes('png') ? 'PNG' : 'JPEG',
+        width: 0,
+        height: 0
+      });
+    };
+    img.src = src;
+  });
+};
+
 export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
     let photo = c.receiptPhoto;
     if (!photo) {
-      const compId = c.id || c.documentNumber;
-      if (compId) {
+      const keysToTry = [c.id, c.documentNumber].filter(Boolean) as string[];
+      for (const key of keysToTry) {
         try {
-          const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', compId));
-          const data = photoDoc.data() as any;
-          if (photoDoc.exists() && data?.photo) {
-            photo = data.photo;
+          const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', key));
+          if (photoDoc.exists() && photoDoc.data()?.photo) {
+            photo = photoDoc.data().photo;
+            break;
           }
         } catch (err) {
-          console.error("Could not fetch missing receipt photo for PDF:", err);
+          console.error(`Could not fetch missing receipt photo for key ${key}:`, err);
         }
       }
     }
@@ -174,10 +235,25 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
     }));
   }
 
-  // Create a safe, copy of the rendicion object to avoid mutating frozen store objects
+  // Pre-process all photos via Canvas to guarantee valid JPEG data URLs and exact dimensions
+  const processedComprobantes = await Promise.all(updatedComprobantes.map(async (c) => {
+    if (c.receiptPhoto) {
+      const processed = await ensureCanvasDataUrl(c.receiptPhoto);
+      return {
+        ...c,
+        processedPhoto: processed.dataUrl,
+        photoFormat: processed.format,
+        photoWidth: processed.width,
+        photoHeight: processed.height
+      };
+    }
+    return c;
+  }));
+
+  // Create a safe copy of the rendicion object to avoid mutating frozen store objects
   const rendicion: Rendicion = {
     ...storeRendicion,
-    comprobantes: updatedComprobantes
+    comprobantes: processedComprobantes
   };
 
   const doc = new jsPDF('p', 'mm', 'a4');
@@ -568,7 +644,7 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
       const imgColY = 40;
 
       // Add receipt photo image centered in the space
-      let photoSrc = c.receiptPhoto;
+      let photoSrc = (c as any).processedPhoto || c.receiptPhoto;
       if (photoSrc && !photoSrc.startsWith('data:')) {
         photoSrc = 'data:image/jpeg;base64,' + photoSrc;
       }
@@ -599,20 +675,16 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
           doc.text("adjunto y guardado en la plataforma.", imgColX + (imgMaxW / 2), imgColY + 81, { align: 'center' });
         } else {
           try {
-            let formatType = 'JPEG';
-            if (photoSrc.startsWith('data:image/png')) {
-              formatType = 'PNG';
-            } else if (photoSrc.startsWith('data:image/gif')) {
-              formatType = 'GIF';
-            }
-            
-            const key = c.id || c.documentNumber;
-            const dims = imageDimensions[key];
-            let origW = 0;
-            let origH = 0;
-            if (dims) {
-              origW = dims.width;
-              origH = dims.height;
+            let origW = (c as any).photoWidth || 0;
+            let origH = (c as any).photoHeight || 0;
+
+            if (!origW || !origH) {
+              const key = c.id || c.documentNumber;
+              const dims = imageDimensions[key];
+              if (dims) {
+                origW = dims.width;
+                origH = dims.height;
+              }
             }
 
             let finalW = imgMaxW;
@@ -634,7 +706,9 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
             const imgX = imgColX + (imgMaxW - finalW) / 2;
             const imgY = imgColY + (imgMaxH - finalH) / 2;
             
-            doc.addImage(photoSrc, formatType, imgX, imgY, finalW, finalH, undefined, 'FAST');
+            const fmt = (c as any).photoFormat || (photoSrc.startsWith('data:image/png') ? 'PNG' : 'JPEG');
+
+            doc.addImage(photoSrc, fmt, imgX, imgY, finalW, finalH, undefined, 'FAST');
 
             doc.setDrawColor(229, 231, 235);
             doc.setLineWidth(0.2);
@@ -648,6 +722,17 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
             doc.text("La imagen original se conserva en el sistema.", imgColX + (imgMaxW / 2), 125, { align: 'center' });
           }
         }
+      } else {
+        doc.setFillColor(249, 250, 251);
+        doc.rect(imgColX, imgColY, imgMaxW, 100, 'F');
+        doc.setDrawColor(229, 231, 235);
+        doc.rect(imgColX, imgColY, imgMaxW, 100);
+
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8.5);
+        doc.setTextColor(156, 163, 175);
+        doc.text("Sin copia digital adjunta", imgColX + (imgMaxW / 2), imgColY + 48, { align: 'center' });
+        doc.text("(Utilice el recuadro izquierdo para pegar el físico)", imgColX + (imgMaxW / 2), imgColY + 54, { align: 'center' });
       }
     }
   }
@@ -661,16 +746,22 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
     let photo = c.receiptPhoto;
-    if (!photo && c.id) {
-      try {
-        const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', c.id));
-        const data = photoDoc.data() as any;
-        if (photoDoc.exists() && data?.photo) {
-          photo = data.photo;
+    if (!photo) {
+      const keysToTry = [c.id, c.documentNumber].filter(Boolean) as string[];
+      for (const key of keysToTry) {
+        try {
+          const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', key));
+          if (photoDoc.exists() && photoDoc.data()?.photo) {
+            photo = photoDoc.data().photo;
+            break;
+          }
+        } catch (err) {
+          console.error(`Could not fetch missing receipt photo for key ${key}:`, err);
         }
-      } catch (err) {
-        console.error("Could not fetch missing receipt photo for PDF:", err);
       }
+    }
+    if (photo && !photo.startsWith('data:')) {
+      photo = 'data:image/jpeg;base64,' + photo;
     }
     return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
   }));
@@ -686,30 +777,31 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
     }));
   }
 
-  // Create a safe, copy of the rendicion object to avoid mutating frozen store objects
+  // Pre-process all photos via Canvas to guarantee valid JPEG data URLs and exact dimensions
+  const processedComprobantes = await Promise.all(updatedComprobantes.map(async (c) => {
+    if (c.receiptPhoto) {
+      const processed = await ensureCanvasDataUrl(c.receiptPhoto);
+      return {
+        ...c,
+        processedPhoto: processed.dataUrl,
+        photoFormat: processed.format,
+        photoWidth: processed.width,
+        photoHeight: processed.height
+      };
+    }
+    return c;
+  }));
+
+  // Create a safe copy of the rendicion object to avoid mutating frozen store objects
   const rendicion: Rendicion = {
     ...storeRendicion,
-    comprobantes: updatedComprobantes
+    comprobantes: processedComprobantes
   };
 
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
-  
-  // Pre-load all attached image dimensions asynchronously
-  const imageDimensions: { [key: string]: { width: number; height: number } } = {};
-  for (const c of rendicion.comprobantes) {
-    if (c.receiptPhoto && c.receiptPhoto.startsWith('data:image/')) {
-      try {
-        const key = c.id || c.documentNumber;
-        const dims = await getImageDimensions(c.receiptPhoto);
-        imageDimensions[key] = dims;
-      } catch (err) {
-        console.error("Could not load image dimensions", err);
-      }
-    }
-  }
 
-  const comprobantesConFoto = rendicion.comprobantes.filter(c => c.receiptPhoto || c.hasPhoto);
+  const comprobantesConFoto = rendicion.comprobantes.filter(c => (c as any).processedPhoto || c.receiptPhoto || c.hasPhoto);
   
   if (comprobantesConFoto.length === 0) {
     throw new Error("No hay recibos adjuntos (con foto o documento) en esta rendición.");
@@ -806,7 +898,7 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
     const imgColX = 104;
     const imgColY = 40;
 
-    let photoSrc = c.receiptPhoto;
+    let photoSrc = (c as any).processedPhoto || c.receiptPhoto;
     if (photoSrc && !photoSrc.startsWith('data:')) {
       photoSrc = 'data:image/jpeg;base64,' + photoSrc;
     }
@@ -838,21 +930,8 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
         doc.text("adjunto y guardado en la plataforma.", imgColX + (imgMaxW / 2), imgColY + 81, { align: 'center' });
       } else {
         try {
-          let formatType = 'JPEG';
-          if (photoSrc.startsWith('data:image/png')) {
-            formatType = 'PNG';
-          } else if (photoSrc.startsWith('data:image/gif')) {
-            formatType = 'GIF';
-          }
-          
-          const key = c.id || c.documentNumber;
-          const dims = imageDimensions[key];
-          let origW = 0;
-          let origH = 0;
-          if (dims) {
-            origW = dims.width;
-            origH = dims.height;
-          }
+          let origW = (c as any).photoWidth || 0;
+          let origH = (c as any).photoHeight || 0;
 
           let finalW = imgMaxW;
           let finalH = imgMaxH;
@@ -873,7 +952,9 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
           const imgX = imgColX + (imgMaxW - finalW) / 2;
           const imgY = imgColY + (imgMaxH - finalH) / 2;
           
-          doc.addImage(photoSrc, formatType, imgX, imgY, finalW, finalH, undefined, 'FAST');
+          const fmt = (c as any).photoFormat || (photoSrc.startsWith('data:image/png') ? 'PNG' : 'JPEG');
+
+          doc.addImage(photoSrc, fmt, imgX, imgY, finalW, finalH, undefined, 'FAST');
 
           doc.setDrawColor(229, 231, 235);
           doc.setLineWidth(0.2);

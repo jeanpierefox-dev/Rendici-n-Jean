@@ -83,6 +83,14 @@ export const useAppStore = create<AppState>()(
                   console.error("Error saving receipt photo to Firestore:", err);
                 })
             );
+            if (compCopy.documentNumber) {
+              uploadPromises.push(
+                setDoc(doc(db, 'receipt_photos', compCopy.documentNumber), { photo: photoVal })
+                  .catch(err => {
+                    console.error("Error saving receipt photo by docNumber:", err);
+                  })
+              );
+            }
             delete compCopy.receiptPhoto;
             compCopy.hasPhoto = true;
           } else if (c.receiptPhoto || c.hasPhoto) {
@@ -154,6 +162,14 @@ export const useAppStore = create<AppState>()(
                     console.error("Error saving receipt photo to Firestore:", err);
                   })
               );
+              if (compCopy.documentNumber) {
+                uploadPromises.push(
+                  setDoc(doc(db, 'receipt_photos', compCopy.documentNumber), { photo: photoVal })
+                    .catch(err => {
+                      console.error("Error saving receipt photo by docNumber:", err);
+                    })
+                );
+              }
               delete compCopy.receiptPhoto;
               compCopy.hasPhoto = true;
             } else if (c.receiptPhoto || c.hasPhoto) {
