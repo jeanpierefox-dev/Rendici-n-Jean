@@ -7,6 +7,7 @@ import { Comprobante, DocType, Rendicion, Ingreso } from '../types';
 import { format } from 'date-fns';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { fetchPhotoForComprobante } from '../lib/export';
 
 export function FormRendicion() {
   const { id } = useParams<{ id: string }>();
@@ -351,13 +352,33 @@ export function FormRendicion() {
     const formattedDate = comp.date.includes('T') ? comp.date.split('T')[0] : comp.date;
     setDate(formattedDate);
     setAmount(comp.amount.toString());
-    setReceiptPhoto(comp.receiptPhoto);
     setUploadedFileName(null);
     setUploadedFileSize(null);
-    setFileSuccessMsg(null);
     setCategory(comp.category || 'Transporte');
     setObservation(comp.observation || '');
     setShowDocForm(true);
+
+    if (comp.receiptPhoto) {
+      setReceiptPhoto(comp.receiptPhoto);
+      setFileSuccessMsg('¡Copia digital cargada! Se incluirá en el reporte PDF al actualizar.');
+    } else if (comp.hasPhoto) {
+      setFileSuccessMsg('Cargando previsualización del comprobante...');
+      fetchPhotoForComprobante(comp).then((photo) => {
+        if (photo) {
+          setReceiptPhoto(photo);
+          setFileSuccessMsg('¡Copia digital del comprobante recuperada! Se incluirá en el reporte PDF al actualizar.');
+        } else {
+          setReceiptPhoto(undefined);
+          setFileSuccessMsg(null);
+        }
+      }).catch(() => {
+        setReceiptPhoto(undefined);
+        setFileSuccessMsg(null);
+      });
+    } else {
+      setReceiptPhoto(undefined);
+      setFileSuccessMsg(null);
+    }
   };
 
   const handleCancelEditComprobante = () => {
@@ -388,6 +409,8 @@ export function FormRendicion() {
       // Editing mode
       updatedComprobantes = comprobantes.map(c => {
         if (c.id === editingComprobanteId) {
+          const photoToUse = receiptPhoto !== undefined ? (receiptPhoto === null ? undefined : receiptPhoto) : c.receiptPhoto;
+          const photoPresent = Boolean(photoToUse) || (receiptPhoto === null ? false : c.hasPhoto);
           return {
             ...c,
             type,
@@ -396,8 +419,8 @@ export function FormRendicion() {
             razonSocial,
             date,
             amount: parseFloat(amount),
-            receiptPhoto: receiptPhoto !== undefined ? receiptPhoto : c.receiptPhoto,
-            hasPhoto: !!receiptPhoto || c.hasPhoto,
+            receiptPhoto: photoToUse,
+            hasPhoto: photoPresent,
             category,
             observation: category === 'Otros' || observation ? observation : '',
           };
@@ -414,7 +437,7 @@ export function FormRendicion() {
         razonSocial,
         date,
         amount: parseFloat(amount),
-        receiptPhoto,
+        receiptPhoto: receiptPhoto || undefined,
         hasPhoto: !!receiptPhoto,
         category,
         observation: category === 'Otros' || observation ? observation : '',
@@ -1158,7 +1181,7 @@ export function FormRendicion() {
                       <button
                         type="button"
                         onClick={() => {
-                          setReceiptPhoto(undefined);
+                          setReceiptPhoto(null as any);
                           setUploadedFileName(null);
                           setUploadedFileSize(null);
                           setFileSuccessMsg(null);
