@@ -9,10 +9,74 @@ import { doc as firestoreDoc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { useAppStore } from './store';
 
-export const exportToPDF = (rendiciones: Rendicion[], settings: AppSettings) => {
-  const doc = new jsPDF();
+export const formatPhotoDataUrl = (rawPhoto: string): string => {
+  if (!rawPhoto) return '';
+  let trimmed = rawPhoto.trim();
+  if (trimmed.startsWith('data:')) return trimmed;
+  if (trimmed.startsWith('iVBORw0KGg')) {
+    return 'data:image/png;base64,' + trimmed;
+  }
+  if (trimmed.startsWith('JVBERi0')) {
+    return 'data:application/pdf;base64,' + trimmed;
+  }
+  if (trimmed.startsWith('UklGR')) {
+    return 'data:image/webp;base64,' + trimmed;
+  }
+  return 'data:image/jpeg;base64,' + trimmed;
+};
+
+export const fetchPhotoForComprobante = async (c: any): Promise<string | undefined> => {
+  if (c.receiptPhoto) {
+    return formatPhotoDataUrl(c.receiptPhoto);
+  }
+  const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
+  const keysToTry: string[] = [];
+  for (const k of rawKeys) {
+    const sanitized = k.replace(/\//g, '_');
+    keysToTry.push(sanitized);
+    if (sanitized !== k) {
+      keysToTry.push(k);
+    }
+    const trimmed = k.trim();
+    if (!keysToTry.includes(trimmed)) keysToTry.push(trimmed);
+  }
+  for (const key of keysToTry) {
+    try {
+      const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', key));
+      if (photoDoc.exists() && photoDoc.data()?.photo) {
+        return formatPhotoDataUrl(photoDoc.data().photo);
+      }
+    } catch (err) {
+      console.error(`Could not fetch receipt photo for key ${key}:`, err);
+    }
+  }
+  return undefined;
+};
+
+export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSettings) => {
+  if (!rendiciones || rendiciones.length === 0) {
+    alert("No hay rendiciones para exportar.");
+    return;
+  }
+
+  // Pre-load missing photos for all rendiciones
+  const updatedRendiciones = await Promise.all(rendiciones.map(async (r) => {
+    const updatedComprobantes = await Promise.all(r.comprobantes.map(async (c) => {
+      const photo = await fetchPhotoForComprobante(c);
+      return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
+    }));
+    return { ...r, comprobantes: updatedComprobantes };
+  }));
+
+  if (updatedRendiciones.length === 1) {
+    await exportSingleRendicionPDF(updatedRendiciones[0], settings, true);
+    return;
+  }
+
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
   
-  // Header
+  // Header Logo
   if (settings.companyLogo) {
     try {
       doc.addImage(settings.companyLogo, 'PNG', 14, 10, 40, 20);
@@ -21,63 +85,191 @@ export const exportToPDF = (rendiciones: Rendicion[], settings: AppSettings) => 
     }
   }
 
-  doc.setFontSize(20);
-  doc.setTextColor(33, 37, 41);
-  doc.text('Reporte de Rendiciones', 14, 40);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(30, 58, 138);
+  doc.text('REPORTE CONSOLIDADO DE RENDICIONES', 14, 38);
   
-  doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100);
-  doc.text(`Empresa: ${settings.companyName}`, 14, 48);
-  doc.text(`Fecha de emisión: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 54);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(107, 114, 128);
+  doc.text(`Empresa: ${(settings.companyName || 'Empresa').toUpperCase()}`, 14, 44);
+  doc.text(`Fecha de emisión: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 49);
 
-  // Table
-  const tableColumn = ["Bloque", "Usuario", "Categoría / Obs.", "Tipo Doc.", "Número", "Fecha Doc.", "Monto"];
+  // Table summary
+  const tableColumn = ["Bloque", "Usuario", "Tipo Doc.", "Número", "RUC", "Fecha Doc.", "Monto"];
   const tableRows: any[] = [];
-  
   let total = 0;
 
-  rendiciones.forEach(r => {
+  const allComprobantesWithMeta: Array<{ rendicion: Rendicion; comprobante: any }> = [];
+
+  updatedRendiciones.forEach(r => {
     r.comprobantes.forEach(c => {
       total += c.amount;
-      const rData = [
+      tableRows.push([
         r.name,
         r.userName,
-        c.observation ? `${c.category || 'Otros'} (${c.observation})` : (c.category || 'Otros'),
         c.type,
         c.documentNumber,
+        c.ruc,
         formatLocalDate(c.date),
         `S/ ${c.amount.toFixed(2)}`
-      ];
-      tableRows.push(rData);
+      ]);
+      allComprobantesWithMeta.push({ rendicion: r, comprobante: c });
     });
   });
 
   autoTable(doc, {
     head: [tableColumn],
     body: tableRows,
-    startY: 65,
-    theme: 'grid',
-    styles: { font: 'helvetica', fontSize: 9 },
-    headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
+    startY: 54,
+    theme: 'striped',
+    styles: { font: 'helvetica', fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [249, 250, 251] },
   });
 
-  // Footer/Total
-  const finalY = (doc as any).lastAutoTable.finalY || 65;
-  doc.setFontSize(12);
+  const finalY = (doc as any).lastAutoTable.finalY || 60;
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(33, 37, 41);
-  doc.text(`Total General: S/ ${total.toFixed(2)}`, 14, finalY + 10);
+  doc.setTextColor(31, 41, 55);
+  doc.text(`TOTAL GENERAL CONSOLIDADO: S/ ${total.toFixed(2)}`, 14, finalY + 10);
 
-  // Signatures
-  doc.setFont('helvetica', 'normal');
-  doc.line(20, finalY + 40, 80, finalY + 40);
-  doc.text('Preparado por', 35, finalY + 45);
-  
-  doc.line(120, finalY + 40, 180, finalY + 40);
-  doc.text('Aprobado por', 135, finalY + 45);
+  // Attach Hoja Fedatada pages for every comprobante with a photo/attachment
+  let pageCount = 0;
+  for (let idx = 0; idx < allComprobantesWithMeta.length; idx++) {
+    const { rendicion: r, comprobante: c } = allComprobantesWithMeta[idx];
+    let photoSrc = c.receiptPhoto;
+    if (photoSrc) {
+      pageCount++;
+      doc.addPage();
 
-  doc.save('Rendiciones_Jean_Barsa.pdf');
+      // Outer & inner frame
+      doc.setDrawColor(30, 58, 138);
+      doc.setLineWidth(0.5);
+      doc.rect(8, 8, pageWidth - 16, doc.internal.pageSize.getHeight() - 16);
+      
+      doc.setDrawColor(229, 231, 235);
+      doc.setLineWidth(0.3);
+      doc.rect(10, 10, pageWidth - 20, doc.internal.pageSize.getHeight() - 20);
+      
+      // Header Annex
+      doc.setFillColor(243, 244, 246);
+      doc.rect(12, 12, pageWidth - 24, 22, 'F');
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(30, 58, 138);
+      doc.text(`HOJA FEDATADA - ANEXO N° ${pageCount}`, 16, 20);
+      
+      doc.setFontSize(7.5);
+      doc.setTextColor(107, 114, 128);
+      doc.text(`Bloque: ${r.name} | Colaborador: ${r.userName}`, 16, 26);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(31, 41, 55);
+      doc.text(`${c.type} N° ${c.documentNumber}`, pageWidth - 16, 19, { align: 'right' });
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(75, 85, 99);
+      doc.text(`RUC: ${c.ruc}  |  Fecha: ${formatLocalDate(c.date)}  |  Monto: S/ ${c.amount.toFixed(2)}`, pageWidth - 16, 25, { align: 'right' });
+      
+      doc.setDrawColor(209, 213, 219);
+      doc.line(12, 34, pageWidth - 12, 34);
+
+      // Left physical pasting box
+      const boxX = 12;
+      const boxY = 38;
+      const boxW = 74;
+      const boxH = 242;
+
+      doc.setDrawColor(156, 163, 175);
+      doc.setLineWidth(0.3);
+      doc.setLineDashPattern([2, 2], 0);
+      doc.setFillColor(253, 253, 253);
+      doc.rect(boxX, boxY, boxW, boxH, 'FD');
+      doc.setLineDashPattern([], 0);
+
+      const boxCenterX = boxX + (boxW / 2);
+      const boxCenterY = boxY + (boxH / 2);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(156, 163, 175);
+      doc.text('PEGAR COMPROBANTE', boxCenterX, boxCenterY - 15, { align: 'center' });
+      doc.text('ORIGINAL AQUÍ', boxCenterX, boxCenterY - 9, { align: 'center' });
+
+      doc.setLineWidth(0.3);
+      doc.setDrawColor(209, 213, 219);
+      doc.setLineDashPattern([1, 1], 0);
+      doc.rect(boxCenterX - 16, boxCenterY + 4, 32, 22);
+      doc.setLineDashPattern([], 0);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(156, 163, 175);
+      doc.text('Original Físico', boxCenterX, boxCenterY + 16, { align: 'center' });
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.text('(Sujete firmemente con cinta o goma)', boxCenterX, boxCenterY + 40, { align: 'center' });
+      doc.text('Ancho máx: 70 mm', boxCenterX, boxCenterY + 45, { align: 'center' });
+
+      // Right digital attached image
+      const imgMaxW = 108;
+      const imgMaxH = 242;
+      const imgColX = 90;
+      const imgColY = 38;
+
+      if (photoSrc.startsWith('data:application/pdf')) {
+        doc.setFillColor(243, 244, 246);
+        doc.rect(imgColX, imgColY, imgMaxW, 100, 'F');
+        doc.setDrawColor(209, 213, 219);
+        doc.rect(imgColX, imgColY, imgMaxW, 100);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(30, 58, 138);
+        doc.text("DOCUMENTO ADJUNTO EN PDF", imgColX + (imgMaxW / 2), imgColY + 30, { align: 'center' });
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(75, 85, 99);
+        doc.text(`Documento: ${c.type} N° ${c.documentNumber}`, imgColX + (imgMaxW / 2), imgColY + 45, { align: 'center' });
+        doc.text(`RUC: ${c.ruc}`, imgColX + (imgMaxW / 2), imgColY + 53, { align: 'center' });
+        doc.text(`Monto: S/ ${c.amount.toFixed(2)}`, imgColX + (imgMaxW / 2), imgColY + 61, { align: 'center' });
+      } else {
+        try {
+          const processed = await ensureCanvasDataUrl(photoSrc);
+          let finalW = imgMaxW;
+          let finalH = imgMaxH;
+          if (processed.width > 0 && processed.height > 0) {
+            const ratio = processed.width / processed.height;
+            const containerRatio = imgMaxW / imgMaxH;
+            if (ratio > containerRatio) {
+              finalW = imgMaxW;
+              finalH = imgMaxW / ratio;
+            } else {
+              finalH = imgMaxH;
+              finalW = imgMaxH * ratio;
+            }
+          }
+          const imgX = imgColX + (imgMaxW - finalW) / 2;
+          const imgY = imgColY + Math.min(8, Math.max(0, (imgMaxH - finalH) / 2));
+
+          doc.addImage(processed.dataUrl || photoSrc, processed.format, imgX, imgY, finalW, finalH, undefined, 'FAST');
+          doc.setDrawColor(209, 213, 219);
+          doc.setLineWidth(0.3);
+          doc.rect(imgX, imgY, finalW, finalH);
+        } catch (imgError) {
+          console.error("Could not render image in PDF", imgError);
+        }
+      }
+    }
+  }
+
+  doc.save('Reporte_Consolidado_Rendiciones.pdf');
 };
 
 export const exportToExcel = (rendiciones: Rendicion[], settings: AppSettings) => {
@@ -145,10 +337,7 @@ const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; form
       resolve({ dataUrl: '', format: 'JPEG', width: 800, height: 1000 });
       return;
     }
-    let src = base64Str.trim();
-    if (!src.startsWith('data:')) {
-      src = 'data:image/jpeg;base64,' + src;
-    }
+    let src = formatPhotoDataUrl(base64Str);
 
     if (src.startsWith('data:application/pdf')) {
       resolve({ dataUrl: src, format: 'JPEG', width: 800, height: 1000 });
@@ -156,6 +345,7 @@ const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; form
     }
 
     const img = new Image();
+    img.crossOrigin = 'Anonymous';
     img.onload = () => {
       try {
         const w = img.naturalWidth || img.width || 800;
@@ -202,32 +392,7 @@ const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; form
 export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
-    let photo = c.receiptPhoto;
-    if (!photo) {
-      const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
-      const keysToTry: string[] = [];
-      for (const k of rawKeys) {
-        const sanitized = k.replace(/\//g, '_');
-        keysToTry.push(sanitized);
-        if (sanitized !== k) {
-          keysToTry.push(k);
-        }
-      }
-      for (const key of keysToTry) {
-        try {
-          const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', key));
-          if (photoDoc.exists() && photoDoc.data()?.photo) {
-            photo = photoDoc.data().photo;
-            break;
-          }
-        } catch (err) {
-          console.error(`Could not fetch missing receipt photo for key ${key}:`, err);
-        }
-      }
-    }
-    if (photo && !photo.startsWith('data:')) {
-      photo = 'data:image/jpeg;base64,' + photo;
-    }
+    const photo = await fetchPhotoForComprobante(c);
     return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
   }));
 
@@ -757,32 +922,7 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
 export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, settings: AppSettings) => {
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
-    let photo = c.receiptPhoto;
-    if (!photo) {
-      const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
-      const keysToTry: string[] = [];
-      for (const k of rawKeys) {
-        const sanitized = k.replace(/\//g, '_');
-        keysToTry.push(sanitized);
-        if (sanitized !== k) {
-          keysToTry.push(k);
-        }
-      }
-      for (const key of keysToTry) {
-        try {
-          const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', key));
-          if (photoDoc.exists() && photoDoc.data()?.photo) {
-            photo = photoDoc.data().photo;
-            break;
-          }
-        } catch (err) {
-          console.error(`Could not fetch missing receipt photo for key ${key}:`, err);
-        }
-      }
-    }
-    if (photo && !photo.startsWith('data:')) {
-      photo = 'data:image/jpeg;base64,' + photo;
-    }
+    const photo = await fetchPhotoForComprobante(c);
     return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
   }));
 

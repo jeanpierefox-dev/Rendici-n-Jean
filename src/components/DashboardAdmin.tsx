@@ -120,8 +120,15 @@ export function DashboardAdmin() {
         </div>
         <div className="flex flex-wrap gap-3">
           <button 
-            onClick={() => exportToPDF(rendiciones, settings)}
-            className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+            onClick={async () => {
+              try {
+                await exportToPDF(rendiciones, settings);
+              } catch (e) {
+                console.error("Error exporting PDF", e);
+                alert("Error al generar el reporte PDF.");
+              }
+            }}
+            className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm cursor-pointer"
           >
             <Download className="w-4 h-4 mr-2" />
             Reporte PDF

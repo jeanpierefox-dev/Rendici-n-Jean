@@ -248,8 +248,8 @@ export function FormRendicion() {
         if (file.type === 'application/pdf') {
           base64 = await fileToBase64(file);
         } else {
-          // Compress image to 640x640 at 0.30 quality for ultra-fast saving, syncing, and loading without losing readability
-          base64 = await compressImageToBase64(file, 640, 640, 0.30);
+          // Compress image to 1200x1600 at 0.75 quality for high resolution and clear text legibility in PDF reports
+          base64 = await compressImageToBase64(file, 1200, 1600, 0.75);
         }
         
         const sizeInBytes = base64.length * 0.75;

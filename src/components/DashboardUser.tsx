@@ -107,7 +107,14 @@ export function DashboardUser() {
         </div>
         <div className="flex gap-3 w-full sm:w-auto">
           <button 
-            onClick={() => exportToPDF(myRendiciones, settings)}
+            onClick={async () => {
+              try {
+                await exportToPDF(myRendiciones, settings);
+              } catch (e) {
+                console.error("Error exporting PDF", e);
+                alert("Error al generar el reporte PDF.");
+              }
+            }}
             className="flex-1 sm:flex-none text-center px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer shadow-xs"
           >
             Exportar Todos PDF
