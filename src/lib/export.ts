@@ -205,7 +205,15 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
     let photo = c.receiptPhoto;
     if (!photo) {
-      const keysToTry = [c.id, c.documentNumber].filter(Boolean) as string[];
+      const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
+      const keysToTry: string[] = [];
+      for (const k of rawKeys) {
+        const sanitized = k.replace(/\//g, '_');
+        keysToTry.push(sanitized);
+        if (sanitized !== k) {
+          keysToTry.push(k);
+        }
+      }
       for (const key of keysToTry) {
         try {
           const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', key));
@@ -747,7 +755,15 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
     let photo = c.receiptPhoto;
     if (!photo) {
-      const keysToTry = [c.id, c.documentNumber].filter(Boolean) as string[];
+      const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
+      const keysToTry: string[] = [];
+      for (const k of rawKeys) {
+        const sanitized = k.replace(/\//g, '_');
+        keysToTry.push(sanitized);
+        if (sanitized !== k) {
+          keysToTry.push(k);
+        }
+      }
       for (const key of keysToTry) {
         try {
           const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', key));

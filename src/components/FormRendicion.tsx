@@ -42,6 +42,12 @@ export function FormRendicion() {
   const [rucError, setRucError] = useState('');
   const [emisorDocType, setEmisorDocType] = useState<'RUC' | 'DNI'>('RUC');
 
+  // File Upload confirmation states
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedFileSize, setUploadedFileSize] = useState<string | null>(null);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [fileSuccessMsg, setFileSuccessMsg] = useState<string | null>(null);
+
   // Deterministic fallback Peru business/person name generator for smooth offline / iframe experiences
   const getDeterministicFallback = (docNum: string, type: 'RUC' | 'DNI') => {
     const cleanNum = String(docNum).trim();
@@ -231,19 +237,37 @@ export function FormRendicion() {
         alert('Por límite de sistema, los archivos PDF no deben superar los 800KB. Por favor, comprima el archivo o tome una foto.');
         return;
       }
+      setIsProcessingFile(true);
+      setFileSuccessMsg(null);
       try {
-        // Compress image to 640x640 at 0.30 quality for ultra-fast saving, syncing, and loading without losing readability
-        const base64 = await compressImageToBase64(file, 640, 640, 0.30); 
+        const sizeFormatted = file.size > 1024 * 1024 
+          ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` 
+          : `${Math.round(file.size / 1024)} KB`;
+
+        let base64 = '';
+        if (file.type === 'application/pdf') {
+          base64 = await fileToBase64(file);
+        } else {
+          // Compress image to 640x640 at 0.30 quality for ultra-fast saving, syncing, and loading without losing readability
+          base64 = await compressImageToBase64(file, 640, 640, 0.30);
+        }
         
         const sizeInBytes = base64.length * 0.75;
         if (sizeInBytes > 950 * 1024) {
           alert('El archivo adjunto es muy pesado (máx 950KB comprimido). Intente con una foto de menor resolución.');
+          setIsProcessingFile(false);
           return;
         }
         
         setReceiptPhoto(base64);
+        setUploadedFileName(file.name);
+        setUploadedFileSize(sizeFormatted);
+        setFileSuccessMsg(`¡Documento "${file.name}" (${sizeFormatted}) cargado con éxito! Se incluirá automáticamente en la copia digital del reporte PDF.`);
       } catch (err) {
         console.error('Error reading file', err);
+        alert('Error al procesar el archivo. Intente con otra imagen o PDF.');
+      } finally {
+        setIsProcessingFile(false);
       }
     }
   };
@@ -328,6 +352,9 @@ export function FormRendicion() {
     setDate(formattedDate);
     setAmount(comp.amount.toString());
     setReceiptPhoto(comp.receiptPhoto);
+    setUploadedFileName(null);
+    setUploadedFileSize(null);
+    setFileSuccessMsg(null);
     setCategory(comp.category || 'Transporte');
     setObservation(comp.observation || '');
     setShowDocForm(true);
@@ -344,6 +371,9 @@ export function FormRendicion() {
     setDate('');
     setAmount('');
     setReceiptPhoto(undefined);
+    setUploadedFileName(null);
+    setUploadedFileSize(null);
+    setFileSuccessMsg(null);
     setCategory('Transporte');
     setObservation('');
     setShowDocForm(comprobantes.length === 0);
@@ -366,7 +396,8 @@ export function FormRendicion() {
             razonSocial,
             date,
             amount: parseFloat(amount),
-            receiptPhoto,
+            receiptPhoto: receiptPhoto !== undefined ? receiptPhoto : c.receiptPhoto,
+            hasPhoto: !!receiptPhoto || c.hasPhoto,
             category,
             observation: category === 'Otros' || observation ? observation : '',
           };
@@ -384,6 +415,7 @@ export function FormRendicion() {
         date,
         amount: parseFloat(amount),
         receiptPhoto,
+        hasPhoto: !!receiptPhoto,
         category,
         observation: category === 'Otros' || observation ? observation : '',
       };
@@ -403,6 +435,9 @@ export function FormRendicion() {
     setDate('');
     setAmount('');
     setReceiptPhoto(undefined);
+    setUploadedFileName(null);
+    setUploadedFileSize(null);
+    setFileSuccessMsg(null);
     setCategory('Transporte');
     setObservation('');
     setShowDocForm(false);
@@ -1094,14 +1129,105 @@ export function FormRendicion() {
                 </div>
               </div>
               
-              <div className="sm:col-span-2 md:col-span-3">
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Foto o PDF del Comprobante (Opcional)</label>
-                <div className="flex items-center space-x-4">
-                  <input type="file" id="file-upload" accept="image/*,application/pdf" className="hidden" onChange={handleFileChange} />
-                  <label htmlFor="file-upload" className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-semibold rounded-lg text-gray-700 bg-white hover:bg-gray-50">
-                    <UploadCloud className="w-4 h-4 mr-2 text-gray-500" /> Adjuntar archivo
-                  </label>
-                  {receiptPhoto && <span className="text-xs text-green-600 font-bold">✓ Archivo adjunto listo</span>}
+              <div className="sm:col-span-2 md:col-span-3 border-t border-slate-100 pt-3 mt-1">
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Foto o PDF del Comprobante (Opcional)
+                </label>
+                
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-3">
+                    <input type="file" id="file-upload" accept="image/*,application/pdf" className="hidden" onChange={handleFileChange} />
+                    <label 
+                      htmlFor="file-upload" 
+                      className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 shadow-xs text-xs font-bold rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                    >
+                      {isProcessingFile ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin text-blue-600" />
+                          Procesando documento...
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="w-4 h-4 mr-2 text-blue-600" />
+                          {receiptPhoto ? 'Cambiar / Reemplazar archivo' : 'Adjuntar comprobante (Foto/PDF)'}
+                        </>
+                      )}
+                    </label>
+
+                    {receiptPhoto && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReceiptPhoto(undefined);
+                          setUploadedFileName(null);
+                          setUploadedFileSize(null);
+                          setFileSuccessMsg(null);
+                        }}
+                        className="text-xs text-red-600 hover:text-red-800 font-semibold cursor-pointer underline"
+                      >
+                        Quitar adjunto
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Message Banner confirming upload */}
+                  {fileSuccessMsg && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200/80 rounded-xl flex items-start space-x-3 shadow-xs">
+                      <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-emerald-900">
+                          ¡Comprobante cargado correctamente!
+                        </p>
+                        <p className="text-xs text-emerald-700 mt-0.5">
+                          {fileSuccessMsg}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Thumbnail preview card for image */}
+                  {receiptPhoto && receiptPhoto.startsWith('data:image/') && (
+                    <div className="flex items-center space-x-3 p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl max-w-sm">
+                      <img src={receiptPhoto} alt="Previsualización" className="w-14 h-14 object-cover rounded-lg border border-slate-300 shadow-2xs shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-slate-800 block truncate">
+                          {uploadedFileName || 'Foto del comprobante'}
+                        </span>
+                        <span className="text-[10px] text-slate-500 block">
+                          {uploadedFileSize ? `Tamaño: ${uploadedFileSize}` : 'Imagen lista'}
+                        </span>
+                        <span className="inline-inline-flex items-center px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded mt-1">
+                          ✓ Listo para PDF
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Indicator for PDF attachment */}
+                  {receiptPhoto && receiptPhoto.startsWith('data:application/pdf') && (
+                    <div className="flex items-center space-x-3 p-2.5 bg-blue-50 border border-blue-200/80 rounded-xl max-w-sm">
+                      <FileText className="w-8 h-8 text-blue-600 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-bold text-blue-900 block truncate">
+                          {uploadedFileName || 'Documento PDF'}
+                        </span>
+                        <span className="text-[10px] text-blue-700 block">
+                          Archivo PDF adjunto
+                        </span>
+                        <span className="inline-inline-flex items-center px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded mt-1">
+                          ✓ Documento adjunto
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Info badge when editing an existing record that already had a photo stored */}
+                  {editingComprobanteId && !receiptPhoto && comprobantes.find(c => c.id === editingComprobanteId)?.hasPhoto && (
+                    <div className="p-2.5 bg-blue-50/80 border border-blue-200/80 rounded-xl text-xs text-blue-800 flex items-center space-x-2">
+                      <CheckCircle className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span>Este comprobante ya cuenta con una copia digital adjunta en el sistema. Se incluirá en el reporte PDF.</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -76,7 +76,7 @@ export const useAppStore = create<AppState>()(
           }
           if (compCopy.receiptPhoto) {
             const photoVal = compCopy.receiptPhoto;
-            const docId = compCopy.id;
+            const docId = compCopy.id.replace(/\//g, '_');
             uploadPromises.push(
               setDoc(doc(db, 'receipt_photos', docId), { photo: photoVal })
                 .catch(err => {
@@ -84,12 +84,15 @@ export const useAppStore = create<AppState>()(
                 })
             );
             if (compCopy.documentNumber) {
-              uploadPromises.push(
-                setDoc(doc(db, 'receipt_photos', compCopy.documentNumber), { photo: photoVal })
-                  .catch(err => {
-                    console.error("Error saving receipt photo by docNumber:", err);
-                  })
-              );
+              const safeDocNum = compCopy.documentNumber.trim().replace(/\//g, '_');
+              if (safeDocNum !== docId) {
+                uploadPromises.push(
+                  setDoc(doc(db, 'receipt_photos', safeDocNum), { photo: photoVal })
+                    .catch(err => {
+                      console.error("Error saving receipt photo by docNumber:", err);
+                    })
+                );
+              }
             }
             delete compCopy.receiptPhoto;
             compCopy.hasPhoto = true;
@@ -155,7 +158,7 @@ export const useAppStore = create<AppState>()(
             }
             if (compCopy.receiptPhoto) {
               const photoVal = compCopy.receiptPhoto;
-              const docId = compCopy.id;
+              const docId = compCopy.id.replace(/\//g, '_');
               uploadPromises.push(
                 setDoc(doc(db, 'receipt_photos', docId), { photo: photoVal })
                   .catch(err => {
@@ -163,12 +166,15 @@ export const useAppStore = create<AppState>()(
                   })
               );
               if (compCopy.documentNumber) {
-                uploadPromises.push(
-                  setDoc(doc(db, 'receipt_photos', compCopy.documentNumber), { photo: photoVal })
-                    .catch(err => {
-                      console.error("Error saving receipt photo by docNumber:", err);
-                    })
-                );
+                const safeDocNum = compCopy.documentNumber.trim().replace(/\//g, '_');
+                if (safeDocNum !== docId) {
+                  uploadPromises.push(
+                    setDoc(doc(db, 'receipt_photos', safeDocNum), { photo: photoVal })
+                      .catch(err => {
+                        console.error("Error saving receipt photo by docNumber:", err);
+                      })
+                  );
+                }
               }
               delete compCopy.receiptPhoto;
               compCopy.hasPhoto = true;

@@ -25,16 +25,36 @@ export function DashboardAdmin() {
       }
       setSelectedImage(photo);
     } else {
-      const compId = c.id;
-      if (!compId) {
+      const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
+      if (rawKeys.length === 0) {
         alert('Este comprobante no posee identificador único para consultar el archivo adjunto.');
         return;
       }
-      setLoadingPhotoId(compId);
+      const keysToTry: string[] = [];
+      for (const k of rawKeys) {
+        const sanitized = k.replace(/\//g, '_');
+        keysToTry.push(sanitized);
+        if (sanitized !== k) {
+          keysToTry.push(k);
+        }
+      }
+
+      setLoadingPhotoId(c.id || c.documentNumber);
       try {
-        const docSnap = await getDoc(doc(db, 'receipt_photos', compId));
-        if (docSnap.exists() && docSnap.data()?.photo) {
-          let photo = docSnap.data().photo;
+        let photo: string | null = null;
+        for (const key of keysToTry) {
+          try {
+            const docSnap = await getDoc(doc(db, 'receipt_photos', key));
+            if (docSnap.exists() && docSnap.data()?.photo) {
+              photo = docSnap.data().photo;
+              break;
+            }
+          } catch (err) {
+            console.warn(`Could not fetch photo for key ${key}:`, err);
+          }
+        }
+
+        if (photo) {
           if (!photo.startsWith('data:')) {
             photo = 'data:image/jpeg;base64,' + photo;
           }
@@ -42,7 +62,7 @@ export function DashboardAdmin() {
           useAppStore.setState(state => ({
             rendiciones: state.rendiciones.map(r => r.id === rendicionId ? {
               ...r,
-              comprobantes: r.comprobantes.map(comp => (comp.id === compId || comp.documentNumber === c.documentNumber) ? { ...comp, receiptPhoto: photo, hasPhoto: true } : comp)
+              comprobantes: r.comprobantes.map(comp => (comp.id === c.id || comp.documentNumber === c.documentNumber) ? { ...comp, receiptPhoto: photo, hasPhoto: true } : comp)
             } : r)
           }));
           setSelectedImage(photo);
