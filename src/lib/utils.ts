@@ -33,7 +33,7 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-export const compressImageToBase64 = (file: File, maxWidth = 800, maxHeight = 800, quality = 0.5): Promise<string> => {
+export const compressImageToBase64 = (file: File, maxWidth = 1200, maxHeight = 1600, quality = 0.75): Promise<string> => {
   return new Promise((resolve, reject) => {
     // Only compress images. If it's a PDF or another file type, fall back to standard fileToBase64
     if (!file.type.startsWith('image/')) {
@@ -74,7 +74,7 @@ export const compressImageToBase64 = (file: File, maxWidth = 800, maxHeight = 80
 
         ctx.drawImage(img, 0, 0, width, height);
         
-        // Export as jpeg with compressed quality
+        // Export as jpeg with high quality for clear receipt text readability
         const dataUrl = canvas.toDataURL('image/jpeg', quality);
         resolve(dataUrl);
       };
@@ -86,7 +86,7 @@ export const compressImageToBase64 = (file: File, maxWidth = 800, maxHeight = 80
   });
 };
 
-export const recompressBase64Image = (base64Str: string, maxWidth = 600, maxHeight = 600, quality = 0.4): Promise<string> => {
+export const recompressBase64Image = (base64Str: string, maxWidth = 1200, maxHeight = 1600, quality = 0.75): Promise<string> => {
   return new Promise((resolve, reject) => {
     if (!base64Str.startsWith('data:image/')) {
       resolve(base64Str); // Ignore PDFs or invalid formats

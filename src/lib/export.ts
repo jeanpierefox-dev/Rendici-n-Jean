@@ -142,7 +142,7 @@ const getImageDimensions = (base64Str: string): Promise<{ width: number; height:
 const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; format: 'JPEG' | 'PNG'; width: number; height: number }> => {
   return new Promise((resolve) => {
     if (!base64Str) {
-      resolve({ dataUrl: '', format: 'JPEG', width: 0, height: 0 });
+      resolve({ dataUrl: '', format: 'JPEG', width: 800, height: 1000 });
       return;
     }
     let src = base64Str.trim();
@@ -151,12 +151,11 @@ const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; form
     }
 
     if (src.startsWith('data:application/pdf')) {
-      resolve({ dataUrl: src, format: 'JPEG', width: 0, height: 0 });
+      resolve({ dataUrl: src, format: 'JPEG', width: 800, height: 1000 });
       return;
     }
 
     const img = new Image();
-    img.crossOrigin = 'Anonymous';
     img.onload = () => {
       try {
         const w = img.naturalWidth || img.width || 800;
@@ -169,7 +168,7 @@ const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; form
           ctx.fillStyle = '#FFFFFF';
           ctx.fillRect(0, 0, w, h);
           ctx.drawImage(img, 0, 0);
-          const converted = canvas.toDataURL('image/jpeg', 0.92);
+          const converted = canvas.toDataURL('image/jpeg', 0.95);
           resolve({
             dataUrl: converted,
             format: 'JPEG',
@@ -183,17 +182,17 @@ const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; form
       }
       resolve({
         dataUrl: src,
-        format: src.includes('png') ? 'PNG' : 'JPEG',
-        width: img.naturalWidth || 0,
-        height: img.naturalHeight || 0
+        format: src.includes('png') || src.includes('PNG') ? 'PNG' : 'JPEG',
+        width: img.naturalWidth || 800,
+        height: img.naturalHeight || 1000
       });
     };
     img.onerror = () => {
       resolve({
         dataUrl: src,
-        format: src.includes('png') ? 'PNG' : 'JPEG',
-        width: 0,
-        height: 0
+        format: src.includes('png') || src.includes('PNG') ? 'PNG' : 'JPEG',
+        width: 800,
+        height: 1000
       });
     };
     img.src = src;
@@ -603,11 +602,11 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
       doc.line(12, 34, pageWidth - 12, 34);
 
       // --- LEFT SIDE: PHYSICAL RECEIPT PASTING BOX ---
-      // Width for pasting: approx 86 mm, Height: approx 236 mm
-      const boxX = 14;
-      const boxY = 40;
-      const boxW = 86;
-      const boxH = 236;
+      // Width for pasting: 76 mm, Height: 240 mm
+      const boxX = 12;
+      const boxY = 38;
+      const boxW = 74;
+      const boxH = 242;
 
       doc.setDrawColor(156, 163, 175); // light gray border
       doc.setLineWidth(0.3);
@@ -621,7 +620,7 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
 
       // Paste text labels inside the box
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
       doc.setTextColor(156, 163, 175); // gray-400
       doc.text('PEGAR COMPROBANTE', boxCenterX, boxCenterY - 15, { align: 'center' });
       doc.text('ORIGINAL AQUÍ', boxCenterX, boxCenterY - 9, { align: 'center' });
@@ -630,7 +629,7 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
       doc.setLineWidth(0.3);
       doc.setDrawColor(209, 213, 219);
       doc.setLineDashPattern([1, 1], 0);
-      doc.rect(boxCenterX - 18, boxCenterY + 4, 36, 24);
+      doc.rect(boxCenterX - 16, boxCenterY + 4, 32, 22);
       doc.setLineDashPattern([], 0);
 
       doc.setFont('helvetica', 'normal');
@@ -642,14 +641,14 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
       doc.setFontSize(7);
       doc.setTextColor(156, 163, 175);
       doc.text('(Sujete firmemente con cinta o goma)', boxCenterX, boxCenterY + 40, { align: 'center' });
-      doc.text('Ancho máx: 82 mm', boxCenterX, boxCenterY + 45, { align: 'center' });
+      doc.text('Ancho máx: 70 mm', boxCenterX, boxCenterY + 45, { align: 'center' });
 
       // --- RIGHT SIDE: COMPLETE ATTACHED DIGITAL IMAGE ---
-      // Width for image: approx 92 mm, Height: approx 236 mm
-      const imgMaxW = 92;
-      const imgMaxH = 236;
-      const imgColX = 104;
-      const imgColY = 40;
+      // Expanded width for image: 108 mm, Height: 242 mm for optimal legibility
+      const imgMaxW = 108;
+      const imgMaxH = 242;
+      const imgColX = 90;
+      const imgColY = 38;
 
       // Add receipt photo image centered in the space
       let photoSrc = (c as any).processedPhoto || c.receiptPhoto;
@@ -689,37 +688,42 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
             if (!origW || !origH) {
               const key = c.id || c.documentNumber;
               const dims = imageDimensions[key];
-              if (dims) {
+              if (dims && dims.width > 0 && dims.height > 0) {
                 origW = dims.width;
                 origH = dims.height;
               }
             }
 
+            // Safe fallback aspect ratio (800x1000 = 0.8) to prevent stretching if unmeasured
+            if (!origW || !origH) {
+              origW = 800;
+              origH = 1000;
+            }
+
             let finalW = imgMaxW;
             let finalH = imgMaxH;
 
-            if (origW > 0 && origH > 0) {
-              const ratio = origW / origH;
-              const containerRatio = imgMaxW / imgMaxH;
-              
-              if (ratio > containerRatio) {
-                finalW = imgMaxW;
-                finalH = imgMaxW / ratio;
-              } else {
-                finalH = imgMaxH;
-                finalW = imgMaxH * ratio;
-              }
+            const ratio = origW / origH;
+            const containerRatio = imgMaxW / imgMaxH;
+            
+            if (ratio > containerRatio) {
+              finalW = imgMaxW;
+              finalH = imgMaxW / ratio;
+            } else {
+              finalH = imgMaxH;
+              finalW = imgMaxH * ratio;
             }
 
             const imgX = imgColX + (imgMaxW - finalW) / 2;
-            const imgY = imgColY + (imgMaxH - finalH) / 2;
+            // Position near the top of column with slight padding so receipt is prominent
+            const imgY = imgColY + Math.min(8, Math.max(0, (imgMaxH - finalH) / 2));
             
-            const fmt = (c as any).photoFormat || (photoSrc.startsWith('data:image/png') ? 'PNG' : 'JPEG');
+            const fmt = (c as any).photoFormat || (photoSrc.includes('png') || photoSrc.includes('PNG') ? 'PNG' : 'JPEG');
 
             doc.addImage(photoSrc, fmt, imgX, imgY, finalW, finalH, undefined, 'FAST');
 
-            doc.setDrawColor(229, 231, 235);
-            doc.setLineWidth(0.2);
+            doc.setDrawColor(209, 213, 219);
+            doc.setLineWidth(0.3);
             doc.rect(imgX, imgY, finalW, finalH);
           } catch (imgError) {
             console.error("Could not render receipt image in PDF", imgError);
@@ -868,10 +872,10 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
     doc.line(12, 34, pageWidth - 12, 34);
 
     // --- LEFT SIDE: PHYSICAL RECEIPT PASTING BOX ---
-    const boxX = 14;
-    const boxY = 40;
-    const boxW = 86;
-    const boxH = 236;
+    const boxX = 12;
+    const boxY = 38;
+    const boxW = 74;
+    const boxH = 242;
 
     doc.setDrawColor(156, 163, 175); // light gray border
     doc.setLineWidth(0.3);
@@ -885,7 +889,7 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
 
     // Paste text labels inside the box
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
+    doc.setFontSize(8.5);
     doc.setTextColor(156, 163, 175); // gray-400
     doc.text('PEGAR COMPROBANTE', boxCenterX, boxCenterY - 15, { align: 'center' });
     doc.text('ORIGINAL AQUÍ', boxCenterX, boxCenterY - 9, { align: 'center' });
@@ -894,7 +898,7 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
     doc.setLineWidth(0.3);
     doc.setDrawColor(209, 213, 219);
     doc.setLineDashPattern([1, 1], 0);
-    doc.rect(boxCenterX - 18, boxCenterY + 4, 36, 24);
+    doc.rect(boxCenterX - 16, boxCenterY + 4, 32, 22);
     doc.setLineDashPattern([], 0);
 
     doc.setFont('helvetica', 'normal');
@@ -906,13 +910,13 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
     doc.setFontSize(7);
     doc.setTextColor(156, 163, 175);
     doc.text('(Sujete firmemente con cinta o goma)', boxCenterX, boxCenterY + 40, { align: 'center' });
-    doc.text('Ancho máx: 82 mm', boxCenterX, boxCenterY + 45, { align: 'center' });
+    doc.text('Ancho máx: 70 mm', boxCenterX, boxCenterY + 45, { align: 'center' });
 
     // --- RIGHT SIDE: COMPLETE ATTACHED DIGITAL IMAGE OR PDF ---
-    const imgMaxW = 92;
-    const imgMaxH = 236;
-    const imgColX = 104;
-    const imgColY = 40;
+    const imgMaxW = 108;
+    const imgMaxH = 242;
+    const imgColX = 90;
+    const imgColY = 38;
 
     let photoSrc = (c as any).processedPhoto || c.receiptPhoto;
     if (photoSrc && !photoSrc.startsWith('data:')) {
@@ -949,31 +953,34 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
           let origW = (c as any).photoWidth || 0;
           let origH = (c as any).photoHeight || 0;
 
+          if (!origW || !origH) {
+            origW = 800;
+            origH = 1000;
+          }
+
           let finalW = imgMaxW;
           let finalH = imgMaxH;
 
-          if (origW > 0 && origH > 0) {
-            const ratio = origW / origH;
-            const containerRatio = imgMaxW / imgMaxH;
-            
-            if (ratio > containerRatio) {
-              finalW = imgMaxW;
-              finalH = imgMaxW / ratio;
-            } else {
-              finalH = imgMaxH;
-              finalW = imgMaxH * ratio;
-            }
+          const ratio = origW / origH;
+          const containerRatio = imgMaxW / imgMaxH;
+          
+          if (ratio > containerRatio) {
+            finalW = imgMaxW;
+            finalH = imgMaxW / ratio;
+          } else {
+            finalH = imgMaxH;
+            finalW = imgMaxH * ratio;
           }
 
           const imgX = imgColX + (imgMaxW - finalW) / 2;
-          const imgY = imgColY + (imgMaxH - finalH) / 2;
+          const imgY = imgColY + Math.min(8, Math.max(0, (imgMaxH - finalH) / 2));
           
-          const fmt = (c as any).photoFormat || (photoSrc.startsWith('data:image/png') ? 'PNG' : 'JPEG');
+          const fmt = (c as any).photoFormat || (photoSrc.includes('png') || photoSrc.includes('PNG') ? 'PNG' : 'JPEG');
 
           doc.addImage(photoSrc, fmt, imgX, imgY, finalW, finalH, undefined, 'FAST');
 
-          doc.setDrawColor(229, 231, 235);
-          doc.setLineWidth(0.2);
+          doc.setDrawColor(209, 213, 219);
+          doc.setLineWidth(0.3);
           doc.rect(imgX, imgY, finalW, finalH);
         } catch (imgError) {
           console.error("Could not render receipt image in PDF", imgError);
