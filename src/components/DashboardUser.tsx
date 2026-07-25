@@ -7,13 +7,13 @@ import {
   FolderOpen, PlusCircle, Clock, CheckCircle2, XCircle, 
   FileText, ChevronDown, ChevronUp, Calendar, Pencil, 
   Coins, Landmark, AlertCircle, ArrowRight, Loader2, Paperclip,
-  Eye, Download, X
+  Eye, Download, X, Upload
 } from 'lucide-react';
-import { exportToPDF, exportSingleRendicionPDF } from '../lib/export';
-import { Comprobante } from '../types';
+import { exportToPDF, exportSingleRendicionPDF, exportRendicionReceiptsPDF } from '../lib/export';
+import { Rendicion, Comprobante } from '../types';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { formatLocalDate } from '../lib/utils';
+import { formatLocalDate, fileToBase64, compressImageToBase64 } from '../lib/utils';
 
 export function DashboardUser() {
   const { rendiciones, currentUser, settings } = useAppStore();
@@ -21,6 +21,55 @@ export function DashboardUser() {
   const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null);
+  const [uploadingCompId, setUploadingCompId] = useState<string | null>(null);
+
+  const handleDirectUploadAttachment = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    rendicion: Rendicion,
+    comprobanteTarget: Comprobante
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const targetId = comprobanteTarget.id || comprobanteTarget.documentNumber || Date.now().toString();
+    setUploadingCompId(targetId);
+    try {
+      let base64Photo = '';
+      if (file.type === 'application/pdf') {
+        base64Photo = await fileToBase64(file);
+      } else {
+        base64Photo = await compressImageToBase64(file, 1200, 1600, 0.75);
+      }
+
+      if (!base64Photo.startsWith('data:')) {
+        base64Photo = 'data:image/jpeg;base64,' + base64Photo;
+      }
+
+      const updatedComprobantes = rendicion.comprobantes.map(c => {
+        const isMatch = (c.id && c.id === comprobanteTarget.id) || (c.documentNumber && c.documentNumber === comprobanteTarget.documentNumber);
+        if (isMatch) {
+          return {
+            ...c,
+            receiptPhoto: base64Photo,
+            hasPhoto: true
+          };
+        }
+        return c;
+      });
+
+      await useAppStore.getState().updateRendicion(rendicion.id, {
+        comprobantes: updatedComprobantes
+      });
+
+      alert('¡Copia digital del recibo adjuntada con éxito! Quedará visible al lado derecho de la Hoja Fedatada en el reporte PDF.');
+    } catch (err) {
+      console.error("Error uploading attachment:", err);
+      alert('Error al subir la imagen del comprobante.');
+    } finally {
+      setUploadingCompId(null);
+      e.target.value = '';
+    }
+  };
 
   const handleViewPhoto = async (c: Comprobante, rendicionId: string) => {
     if (c.receiptPhoto) {
@@ -289,7 +338,7 @@ export function DashboardUser() {
                           </div>
 
                           <div className="space-y-2.5">
-                            {/* Download PDF Button */}
+                            {/* Download Main PDF Button */}
                             <button
                               onClick={async () => {
                                 setGeneratingPdfId(rendicion.id);
@@ -303,12 +352,12 @@ export function DashboardUser() {
                                 }
                               }}
                               disabled={generatingPdfId !== null}
-                              className="w-full inline-flex items-center justify-center px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer gap-2 disabled:opacity-50"
+                              className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2 disabled:opacity-50"
                             >
                               {generatingPdfId === rendicion.id ? (
                                 <>
                                   <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                                  Generando Reporte PDF...
+                                  Generando PDF...
                                 </>
                               ) : (
                                 <>
@@ -318,15 +367,128 @@ export function DashboardUser() {
                               )}
                             </button>
 
+                            {/* Download Receipts PDF Button */}
+                            <button
+                              onClick={async () => {
+                                setGeneratingPdfId(rendicion.id);
+                                try {
+                                  await exportRendicionReceiptsPDF(rendicion, settings);
+                                } catch (err: any) {
+                                  console.error(err);
+                                  alert(err.message || 'Error al generar el reporte de recibos PDF.');
+                                } finally {
+                                  setGeneratingPdfId(null);
+                                }
+                              }}
+                              disabled={generatingPdfId !== null}
+                              className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2 disabled:opacity-50"
+                              title="Descargar Reporte de Recibos en Hojas Fedatadas"
+                            >
+                              {generatingPdfId === rendicion.id ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                                  Generando Recibos...
+                                </>
+                              ) : (
+                                <>
+                                  <Paperclip className="w-3.5 h-3.5 text-white" />
+                                  Descargar Recibos (PDF)
+                                </>
+                              )}
+                            </button>
+
                             {/* Edit Button */}
                             <Link
                               to={`/edit/${rendicion.id}`}
-                              className="w-full inline-flex items-center justify-center px-3.5 py-2.5 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2"
+                              className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2"
                             >
                               <Pencil className="w-3.5 h-3.5 text-gray-600" />
                               Editar / Agregar Comprobantes
                             </Link>
                           </div>
+                        </div>
+                      </div>
+
+                      {/* Detailed list of comprobantes in this block */}
+                      <div className="mt-6 pt-5 border-t border-gray-200">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <FileText className="w-4 h-4 text-blue-600" /> Detalle de Comprobantes del Bloque ({rendicion.comprobantes.length})
+                          </h4>
+                          <span className="text-xs text-gray-500">
+                            Puedes adjuntar o actualizar la copia digital directamente de cada recibo
+                          </span>
+                        </div>
+
+                        <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white shadow-xs">
+                          <table className="w-full text-left text-xs min-w-[600px]">
+                            <thead>
+                              <tr className="bg-gray-50 text-gray-600 border-b border-gray-200">
+                                <th className="p-2.5 font-bold">Fecha</th>
+                                <th className="p-2.5 font-bold">Documento</th>
+                                <th className="p-2.5 font-bold">RUC / Razón Social</th>
+                                <th className="p-2.5 font-bold">Categoría</th>
+                                <th className="p-2.5 font-bold text-right">Monto</th>
+                                <th className="p-2.5 font-bold text-right">Copia Digital / Recibo</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {rendicion.comprobantes.map((c, i) => (
+                                <tr key={c.id || i} className="hover:bg-gray-50/60 transition-colors">
+                                  <td className="p-2.5 text-gray-600 font-medium">{formatLocalDate(c.date)}</td>
+                                  <td className="p-2.5 font-bold text-gray-900">{c.type} {c.documentNumber}</td>
+                                  <td className="p-2.5 text-gray-600">
+                                    <div className="font-semibold text-gray-800">{c.ruc}</div>
+                                    {c.razonSocial && <div className="text-[10px] text-gray-500 truncate max-w-[150px]">{c.razonSocial}</div>}
+                                  </td>
+                                  <td className="p-2.5 text-gray-700 font-medium">{c.category || 'Otros'}</td>
+                                  <td className="p-2.5 text-gray-900 font-extrabold text-right">S/ {c.amount.toFixed(2)}</td>
+                                  <td className="p-2.5 text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                      {(c.receiptPhoto || c.hasPhoto) && (
+                                        <button 
+                                          onClick={() => handleViewPhoto(c, rendicion.id)}
+                                          disabled={loadingPhotoId === c.id}
+                                          className="inline-flex items-center text-blue-600 hover:text-blue-800 text-xs font-semibold px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 border border-blue-200/60 transition-colors disabled:opacity-50"
+                                          title="Ver archivo guardado"
+                                        >
+                                          {loadingPhotoId === c.id ? (
+                                            <>
+                                              <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Cargando...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Eye className="w-3 h-3 mr-1" /> Ver Adjunto
+                                            </>
+                                          )}
+                                        </button>
+                                      )}
+
+                                      <label className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded transition-colors cursor-pointer border shadow-xs ${uploadingCompId === (c.id || c.documentNumber) ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'}`} title="Adjuntar o reemplazar archivo del recibo (Imagen o PDF)">
+                                        {uploadingCompId === (c.id || c.documentNumber) ? (
+                                          <>
+                                            <Loader2 className="w-3 h-3 mr-1 animate-spin text-emerald-600" /> Subiendo...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Paperclip className="w-3 h-3 mr-1 text-emerald-600" />
+                                            {c.receiptPhoto || c.hasPhoto ? 'Cambiar Recibo' : '📎 Adjuntar Recibo'}
+                                          </>
+                                        )}
+                                        <input 
+                                          type="file" 
+                                          accept="image/*,application/pdf" 
+                                          className="hidden" 
+                                          disabled={uploadingCompId !== null}
+                                          onChange={(e) => handleDirectUploadAttachment(e, rendicion, c)} 
+                                        />
+                                      </label>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     </div>

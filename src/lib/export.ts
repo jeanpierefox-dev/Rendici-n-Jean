@@ -961,15 +961,15 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  const comprobantesConFoto = rendicion.comprobantes.filter(c => (c as any).processedPhoto || c.receiptPhoto || c.hasPhoto);
+  const comprobantesToRender = rendicion.comprobantes;
   
-  if (comprobantesConFoto.length === 0) {
-    throw new Error("No hay recibos adjuntos (con foto o documento) en esta rendición.");
+  if (comprobantesToRender.length === 0) {
+    throw new Error("No hay comprobantes registrados en esta rendición.");
   }
 
   // Draw receipts as Hoja Fedatada
-  for (let idx = 0; idx < comprobantesConFoto.length; idx++) {
-    const c = comprobantesConFoto[idx];
+  for (let idx = 0; idx < comprobantesToRender.length; idx++) {
+    const c = comprobantesToRender[idx];
     if (idx > 0) {
       doc.addPage();
     }
