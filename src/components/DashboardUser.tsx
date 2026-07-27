@@ -9,7 +9,7 @@ import {
   Coins, Landmark, AlertCircle, ArrowRight, Loader2, Paperclip,
   Eye, Download, X, Upload
 } from 'lucide-react';
-import { exportToPDF, exportSingleRendicionPDF, exportRendicionReceiptsPDF } from '../lib/export';
+import { exportToPDF, exportSingleRendicionPDF, exportRendicionReceiptsPDF, formatPhotoDataUrl } from '../lib/export';
 import { Rendicion, Comprobante } from '../types';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -41,9 +41,7 @@ export function DashboardUser() {
         base64Photo = await compressImageToBase64(file, 1200, 1600, 0.75);
       }
 
-      if (!base64Photo.startsWith('data:')) {
-        base64Photo = 'data:image/jpeg;base64,' + base64Photo;
-      }
+      base64Photo = formatPhotoDataUrl(base64Photo);
 
       const updatedComprobantes = rendicion.comprobantes.map(c => {
         const isMatch = (c.id && c.id === comprobanteTarget.id) || (c.documentNumber && c.documentNumber === comprobanteTarget.documentNumber);
@@ -73,32 +71,51 @@ export function DashboardUser() {
 
   const handleViewPhoto = async (c: Comprobante, rendicionId: string) => {
     if (c.receiptPhoto) {
-      let photo = c.receiptPhoto;
-      if (!photo.startsWith('data:')) {
-        photo = 'data:image/jpeg;base64,' + photo;
-      }
+      const photo = formatPhotoDataUrl(c.receiptPhoto);
       setSelectedImage(photo);
     } else {
-      const compId = c.id;
-      if (!compId) {
+      const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
+      if (rawKeys.length === 0) {
         alert('Este comprobante no posee identificador único para consultar el archivo adjunto.');
         return;
       }
-      setLoadingPhotoId(compId);
-      try {
-        const docSnap = await getDoc(doc(db, 'receipt_photos', compId));
-        if (docSnap.exists() && docSnap.data()?.photo) {
-          let photo = docSnap.data().photo;
-          if (!photo.startsWith('data:')) {
-            photo = 'data:image/jpeg;base64,' + photo;
+      const keysToTry: string[] = [];
+      for (const k of rawKeys) {
+        const trimmed = k.trim();
+        const sanitized = k.replace(/\//g, '_');
+        const trimmedSanitized = trimmed.replace(/\//g, '_');
+        
+        [sanitized, k, trimmed, trimmedSanitized].forEach(key => {
+          if (key && !keysToTry.includes(key)) {
+            keysToTry.push(key);
           }
+        });
+      }
+
+      setLoadingPhotoId(c.id || c.documentNumber);
+      try {
+        let photo: string | null = null;
+        for (const key of keysToTry) {
+          try {
+            const docSnap = await getDoc(doc(db, 'receipt_photos', key));
+            if (docSnap.exists() && docSnap.data()?.photo) {
+              photo = docSnap.data().photo;
+              break;
+            }
+          } catch (err) {
+            console.warn(`Could not fetch photo for key ${key}:`, err);
+          }
+        }
+
+        if (photo) {
+          const formattedPhoto = formatPhotoDataUrl(photo);
           useAppStore.setState(state => ({
             rendiciones: state.rendiciones.map(r => r.id === rendicionId ? {
               ...r,
-              comprobantes: r.comprobantes.map(comp => (comp.id === compId || comp.documentNumber === c.documentNumber) ? { ...comp, receiptPhoto: photo, hasPhoto: true } : comp)
+              comprobantes: r.comprobantes.map(comp => (comp.id === c.id || comp.documentNumber === c.documentNumber) ? { ...comp, receiptPhoto: formattedPhoto, hasPhoto: true } : comp)
             } : r)
           }));
-          setSelectedImage(photo);
+          setSelectedImage(formattedPhoto);
         } else {
           alert('No se encontró el archivo adjunto en la base de datos o el bloque fue guardado sin imagen.');
         }

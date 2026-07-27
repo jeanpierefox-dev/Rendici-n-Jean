@@ -7,7 +7,7 @@ import { Comprobante, DocType, Rendicion, Ingreso } from '../types';
 import { format } from 'date-fns';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { fetchPhotoForComprobante } from '../lib/export';
+import { fetchPhotoForComprobante, formatPhotoDataUrl } from '../lib/export';
 
 export function FormRendicion() {
   const { id } = useParams<{ id: string }>();
@@ -252,6 +252,7 @@ export function FormRendicion() {
           // Compress image to 1200x1600 at 0.75 quality for high resolution and clear text legibility in PDF reports
           base64 = await compressImageToBase64(file, 1200, 1600, 0.75);
         }
+        base64 = formatPhotoDataUrl(base64);
         
         const sizeInBytes = base64.length * 0.75;
         if (sizeInBytes > 950 * 1024) {

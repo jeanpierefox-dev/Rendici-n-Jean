@@ -3,7 +3,7 @@ import { useAppStore } from '../lib/store';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { exportToPDF, exportToExcel, exportSingleRendicionPDF, exportRendicionReceiptsPDF } from '../lib/export';
+import { exportToPDF, exportToExcel, exportSingleRendicionPDF, exportRendicionReceiptsPDF, formatPhotoDataUrl } from '../lib/export';
 import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp, FileText, ShieldCheck, Trash2, Loader2, Paperclip, Upload } from 'lucide-react';
 import { Rendicion, Comprobante } from '../types';
 import { doc, getDoc } from 'firebase/firestore';
@@ -36,9 +36,7 @@ export function DashboardAdmin() {
         base64Photo = await compressImageToBase64(file, 1200, 1600, 0.75);
       }
 
-      if (!base64Photo.startsWith('data:')) {
-        base64Photo = 'data:image/jpeg;base64,' + base64Photo;
-      }
+      base64Photo = formatPhotoDataUrl(base64Photo);
 
       const updatedComprobantes = rendicion.comprobantes.map(c => {
         const isMatch = (c.id && c.id === comprobanteTarget.id) || (c.documentNumber && c.documentNumber === comprobanteTarget.documentNumber);
@@ -68,10 +66,7 @@ export function DashboardAdmin() {
 
   const handleViewPhoto = async (c: Comprobante, rendicionId: string) => {
     if (c.receiptPhoto) {
-      let photo = c.receiptPhoto;
-      if (!photo.startsWith('data:')) {
-        photo = 'data:image/jpeg;base64,' + photo;
-      }
+      const photo = formatPhotoDataUrl(c.receiptPhoto);
       setSelectedImage(photo);
     } else {
       const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
@@ -81,11 +76,15 @@ export function DashboardAdmin() {
       }
       const keysToTry: string[] = [];
       for (const k of rawKeys) {
+        const trimmed = k.trim();
         const sanitized = k.replace(/\//g, '_');
-        keysToTry.push(sanitized);
-        if (sanitized !== k) {
-          keysToTry.push(k);
-        }
+        const trimmedSanitized = trimmed.replace(/\//g, '_');
+        
+        [sanitized, k, trimmed, trimmedSanitized].forEach(key => {
+          if (key && !keysToTry.includes(key)) {
+            keysToTry.push(key);
+          }
+        });
       }
 
       setLoadingPhotoId(c.id || c.documentNumber);
@@ -104,17 +103,14 @@ export function DashboardAdmin() {
         }
 
         if (photo) {
-          if (!photo.startsWith('data:')) {
-            photo = 'data:image/jpeg;base64,' + photo;
-          }
-          // Update the store's state so it's cached in memory!
+          const formattedPhoto = formatPhotoDataUrl(photo);
           useAppStore.setState(state => ({
             rendiciones: state.rendiciones.map(r => r.id === rendicionId ? {
               ...r,
-              comprobantes: r.comprobantes.map(comp => (comp.id === c.id || comp.documentNumber === c.documentNumber) ? { ...comp, receiptPhoto: photo, hasPhoto: true } : comp)
+              comprobantes: r.comprobantes.map(comp => (comp.id === c.id || comp.documentNumber === c.documentNumber) ? { ...comp, receiptPhoto: formattedPhoto, hasPhoto: true } : comp)
             } : r)
           }));
-          setSelectedImage(photo);
+          setSelectedImage(formattedPhoto);
         } else {
           alert('No se encontró el archivo adjunto en la base de datos o el bloque fue guardado sin imagen.');
         }

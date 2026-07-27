@@ -12,7 +12,27 @@ import { useAppStore } from './store';
 export const formatPhotoDataUrl = (rawPhoto: string): string => {
   if (!rawPhoto) return '';
   let trimmed = rawPhoto.trim();
-  if (trimmed.startsWith('data:')) return trimmed;
+  
+  if (trimmed.startsWith('data:')) {
+    const commaIdx = trimmed.indexOf(',');
+    if (commaIdx !== -1) {
+      const base64Data = trimmed.slice(commaIdx + 1).trim();
+      if (base64Data.startsWith('JVBERi0')) {
+        return 'data:application/pdf;base64,' + base64Data;
+      }
+      if (base64Data.startsWith('iVBORw0KGg')) {
+        return 'data:image/png;base64,' + base64Data;
+      }
+      if (base64Data.startsWith('UklGR')) {
+        return 'data:image/webp;base64,' + base64Data;
+      }
+      if (base64Data.startsWith('/9j/')) {
+        return 'data:image/jpeg;base64,' + base64Data;
+      }
+    }
+    return trimmed;
+  }
+  
   if (trimmed.startsWith('iVBORw0KGg')) {
     return 'data:image/png;base64,' + trimmed;
   }
@@ -318,7 +338,9 @@ const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; form
     }
 
     const img = new Image();
-    img.crossOrigin = 'Anonymous';
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      img.crossOrigin = 'Anonymous';
+    }
     img.onload = () => {
       try {
         const w = img.naturalWidth || img.width || 800;
@@ -856,9 +878,17 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
             // Position near the top of column with slight padding so receipt is prominent
             const imgY = imgColY + Math.min(8, Math.max(0, (imgMaxH - finalH) / 2));
             
-            const fmt = (c as any).photoFormat || (photoSrc.includes('png') || photoSrc.includes('PNG') ? 'PNG' : 'JPEG');
+            let pSrc = (c as any).processedPhoto || photoSrc;
+            pSrc = formatPhotoDataUrl(pSrc);
 
-            doc.addImage(photoSrc, fmt, imgX, imgY, finalW, finalH, undefined, 'FAST');
+            let fmt: 'JPEG' | 'PNG' | 'WEBP' = 'JPEG';
+            if (pSrc.startsWith('data:image/png')) {
+              fmt = 'PNG';
+            } else if (pSrc.startsWith('data:image/webp')) {
+              fmt = 'WEBP';
+            }
+
+            doc.addImage(pSrc, fmt, imgX, imgY, finalW, finalH, undefined, 'FAST');
 
             doc.setDrawColor(209, 213, 219);
             doc.setLineWidth(0.3);
@@ -1094,9 +1124,17 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion | Ren
           const imgX = imgColX + (imgMaxW - finalW) / 2;
           const imgY = imgColY + Math.min(8, Math.max(0, (imgMaxH - finalH) / 2));
           
-          const fmt = (c as any).photoFormat || (photoSrc.includes('png') || photoSrc.includes('PNG') ? 'PNG' : 'JPEG');
+          let pSrc = (c as any).processedPhoto || photoSrc;
+          pSrc = formatPhotoDataUrl(pSrc);
 
-          doc.addImage(photoSrc, fmt, imgX, imgY, finalW, finalH, undefined, 'FAST');
+          let fmt: 'JPEG' | 'PNG' | 'WEBP' = 'JPEG';
+          if (pSrc.startsWith('data:image/png')) {
+            fmt = 'PNG';
+          } else if (pSrc.startsWith('data:image/webp')) {
+            fmt = 'WEBP';
+          }
+
+          doc.addImage(pSrc, fmt, imgX, imgY, finalW, finalH, undefined, 'FAST');
 
           doc.setDrawColor(209, 213, 219);
           doc.setLineWidth(0.3);
