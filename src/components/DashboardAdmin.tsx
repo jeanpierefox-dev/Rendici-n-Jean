@@ -16,7 +16,7 @@ export function DashboardAdmin() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null);
   const [uploadingCompId, setUploadingCompId] = useState<string | null>(null);
-  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
+  const [generatingPdfKey, setGeneratingPdfKey] = useState<string | null>(null);
 
   const handleDirectUploadAttachment = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -332,21 +332,21 @@ export function DashboardAdmin() {
                         )}
                         <button 
                           onClick={async () => {
-                            setGeneratingPdfId(rendicion.id);
+                            setGeneratingPdfKey(`${rendicion.id}_table_report`);
                             try {
                               await exportSingleRendicionPDF(rendicion, settings, true);
                             } catch (err) {
                               console.error(err);
                               alert('Error al generar el reporte PDF.');
                             } finally {
-                              setGeneratingPdfId(null);
+                              setGeneratingPdfKey(null);
                             }
                           }}
-                          disabled={generatingPdfId !== null}
+                          disabled={generatingPdfKey !== null}
                           className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer disabled:opacity-50"
                           title="Descargar Reporte Completo con Comprobantes (PDF)"
                         >
-                          {generatingPdfId === rendicion.id ? (
+                          {generatingPdfKey === `${rendicion.id}_table_report` ? (
                             <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
                           ) : (
                             <Download className="w-5 h-5" />
@@ -507,21 +507,21 @@ export function DashboardAdmin() {
                           <div className="mt-6 pt-4 border-t border-gray-200 flex flex-wrap gap-3">
                             <button
                               onClick={async () => {
-                                setGeneratingPdfId(rendicion.id);
+                                setGeneratingPdfKey(`${rendicion.id}_report`);
                                 try {
                                   await exportSingleRendicionPDF(rendicion, settings, false);
                                 } catch (err) {
                                   console.error(err);
                                   alert('Error al generar el reporte PDF.');
                                 } finally {
-                                  setGeneratingPdfId(null);
+                                  setGeneratingPdfKey(null);
                                 }
                               }}
-                              disabled={generatingPdfId !== null}
+                              disabled={generatingPdfKey !== null}
                               className="inline-flex items-center px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-blue-200/50 disabled:opacity-50"
                               title="Descargar Informe de Liquidación de Gastos (Puro informe sin recibos)"
                             >
-                              {generatingPdfId === rendicion.id ? (
+                              {generatingPdfKey === `${rendicion.id}_report` ? (
                                 <>
                                   <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
                                   Generando Informe...
@@ -536,21 +536,21 @@ export function DashboardAdmin() {
 
                             <button
                               onClick={async () => {
-                                setGeneratingPdfId(rendicion.id);
+                                setGeneratingPdfKey(`${rendicion.id}_receipts`);
                                 try {
                                   await exportRendicionReceiptsPDF(rendicion, settings);
                                 } catch (err: any) {
                                   console.error(err);
                                   alert(err.message || 'Error al generar el reporte de recibos PDF.');
                                 } finally {
-                                  setGeneratingPdfId(null);
+                                  setGeneratingPdfKey(null);
                                 }
                               }}
-                              disabled={generatingPdfId !== null}
+                              disabled={generatingPdfKey !== null}
                               className="inline-flex items-center px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-emerald-200/70 disabled:opacity-50"
                               title="Descargar Reporte de Recibos en Hojas Fedatadas (Lado Izquierdo Físico / Lado Derecho Digital)"
                             >
-                              {generatingPdfId === rendicion.id ? (
+                              {generatingPdfKey === `${rendicion.id}_receipts` ? (
                                 <>
                                   <Loader2 className="w-4 h-4 animate-spin text-emerald-700" />
                                   Generando Recibos PDF...

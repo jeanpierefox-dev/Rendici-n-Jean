@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { Rendicion, AppSettings, Ingreso } from '../types';
+import { Rendicion, AppSettings, Ingreso, Comprobante } from '../types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { formatLocalDate } from './utils';
@@ -167,7 +167,7 @@ export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSetting
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(55, 65, 81);
-    doc.text(`Centro de Costo: ${r.costCenter || 'General'}  |  Estado: ${(r.status || 'Pendiente').toUpperCase()}  |  Adelanto: S/ ${(r.advanceAmount || 0).toFixed(2)}`, 18, currentY + 4.2);
+    doc.text(`Tipo / Centro: ${r.rendicionType || (r as any).costCenter || 'General'}  |  Estado: ${(r.status || 'Pendiente').toUpperCase()}  |  Adelanto: S/ ${(r.advanceAmount || 0).toFixed(2)}`, 18, currentY + 4.2);
     
     doc.setFont('helvetica', 'bold');
     doc.text(`Total Bloque: S/ ${totalBloque.toFixed(2)}`, pageWidth - 18, currentY + 4.2, { align: 'right' });

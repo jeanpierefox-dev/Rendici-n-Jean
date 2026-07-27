@@ -341,17 +341,29 @@ export function FormRendicion() {
 
   // --- COMPROBANTE (EXPENSE DOCUMENT) OPERATIONS ---
   const handleEditComprobante = (comp: Comprobante) => {
+    const safeRuc = comp.ruc || '';
+    const safeDate = comp.date || '';
+    
+    // Safely format date to YYYY-MM-DD for standard HTML input[type="date"]
+    let formattedDate = safeDate;
+    if (safeDate.includes('T')) {
+      formattedDate = safeDate.split('T')[0];
+    } else if (safeDate.includes('/')) {
+      const parts = safeDate.split('/');
+      if (parts.length === 3 && parts[2].length === 4) {
+        formattedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+
     setEditingComprobanteId(comp.id);
-    setType(comp.type);
-    setDocumentNumber(comp.documentNumber);
-    setRuc(comp.ruc);
-    setEmisorDocType(comp.ruc.length === 8 ? 'DNI' : 'RUC');
+    setType(comp.type || 'Factura');
+    setDocumentNumber(comp.documentNumber || '');
+    setRuc(safeRuc);
+    setEmisorDocType(safeRuc.length === 8 ? 'DNI' : 'RUC');
     setRazonSocial(comp.razonSocial || '');
     setRucError('');
-    // Format date string safely for input element
-    const formattedDate = comp.date.includes('T') ? comp.date.split('T')[0] : comp.date;
     setDate(formattedDate);
-    setAmount(comp.amount.toString());
+    setAmount(comp.amount !== undefined && comp.amount !== null ? comp.amount.toString() : '');
     setUploadedFileName(null);
     setUploadedFileSize(null);
     setCategory(comp.category || 'Transporte');
@@ -362,7 +374,7 @@ export function FormRendicion() {
       setReceiptPhoto(comp.receiptPhoto);
       setFileSuccessMsg('¡Copia digital cargada! Se incluirá en el reporte PDF al actualizar.');
     } else if (comp.hasPhoto) {
-      setFileSuccessMsg('Cargando previsualización del comprobante...');
+      setFileSuccessMsg('Cargando copia digital del comprobante...');
       fetchPhotoForComprobante(comp).then((photo) => {
         if (photo) {
           setReceiptPhoto(photo);
@@ -371,7 +383,8 @@ export function FormRendicion() {
           setReceiptPhoto(undefined);
           setFileSuccessMsg(null);
         }
-      }).catch(() => {
+      }).catch((err) => {
+        console.error("Error fetching photo for edit", err);
         setReceiptPhoto(undefined);
         setFileSuccessMsg(null);
       });
@@ -379,6 +392,11 @@ export function FormRendicion() {
       setReceiptPhoto(undefined);
       setFileSuccessMsg(null);
     }
+
+    // Scroll smoothly to form section so user instantly sees the loaded data
+    setTimeout(() => {
+      document.getElementById('comprobante-form-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
   };
 
   const handleCancelEditComprobante = () => {
@@ -403,6 +421,12 @@ export function FormRendicion() {
   const addOrUpdateDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    const parsedAmount = parseFloat(amount) || 0;
+    if (parsedAmount <= 0) {
+      alert('Por favor, ingrese un monto de gasto válido mayor a 0.');
+      return;
+    }
+
     let updatedComprobantes: Comprobante[];
 
     if (editingComprobanteId) {
@@ -414,11 +438,11 @@ export function FormRendicion() {
           return {
             ...c,
             type,
-            documentNumber,
-            ruc,
-            razonSocial,
+            documentNumber: documentNumber.trim(),
+            ruc: ruc.trim(),
+            razonSocial: razonSocial.trim(),
             date,
-            amount: parseFloat(amount),
+            amount: parsedAmount,
             receiptPhoto: photoToUse,
             hasPhoto: photoPresent,
             category,
@@ -432,11 +456,11 @@ export function FormRendicion() {
       const newDoc: Comprobante = {
         id: safeUUID(),
         type,
-        documentNumber,
-        ruc,
-        razonSocial,
+        documentNumber: documentNumber.trim(),
+        ruc: ruc.trim(),
+        razonSocial: razonSocial.trim(),
         date,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         receiptPhoto: receiptPhoto || undefined,
         hasPhoto: !!receiptPhoto,
         category,
@@ -959,7 +983,7 @@ export function FormRendicion() {
 
         {/* Comprobantes Add/Edit Form */}
         {showDocForm ? (
-          <form onSubmit={addOrUpdateDocument} className="p-6 border-t border-gray-100 bg-blue-50/30 space-y-4">
+          <form id="comprobante-form-section" onSubmit={addOrUpdateDocument} className="p-6 border-t border-gray-100 bg-blue-50/30 space-y-4">
             <h4 className="font-bold text-blue-950 text-sm flex items-center">
               {editingComprobanteId ? <Edit3 className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
               {editingComprobanteId ? 'Editar Comprobante' : 'Agregar Nuevo Comprobante'}
@@ -1255,35 +1279,23 @@ export function FormRendicion() {
               </div>
             </div>
             
-            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
               {comprobantes.length > 0 && (
                 <button 
                   type="button" 
                   onClick={handleCancelEditComprobante} 
-                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium"
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium cursor-pointer"
                 >
                   Cancelar
                 </button>
               )}
-              
-              <button 
-                type="button" 
-                onClick={(e) => {
-                  setFileSuccessMsg("¡Comprobante y archivo cargados exitosamente al Reporte PDF de Recibos!");
-                  addOrUpdateDocument(e);
-                }}
-                className="px-4 py-2 text-sm font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-lg transition-colors flex items-center shadow-xs cursor-pointer gap-1.5"
-                title="Cargar y vincular este recibo directamente al reporte PDF de recibos (Hojas Fedatadas)"
-              >
-                <Paperclip className="w-4 h-4 text-emerald-700" />
-                Cargar al Reporte PDF de Recibos
-              </button>
 
               <button 
                 type="submit" 
-                className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center shadow-xs cursor-pointer"
+                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center shadow-xs cursor-pointer gap-2"
               >
-                {editingComprobanteId ? 'Actualizar Comprobante' : 'Añadir Comprobante'}
+                <CheckCircle className="w-4 h-4" />
+                {editingComprobanteId ? 'Actualizar Comprobante' : 'Guardar y Añadir Comprobante'}
               </button>
             </div>
           </form>
