@@ -1,5 +1,22 @@
 export type DocType = 'Factura' | 'Boleta' | 'Otros';
 export type Status = 'Pendiente' | 'Aprobado' | 'Rechazado';
+export type LiquidacionStatus = 'Pendiente' | 'Liquidado' | 'Traspasado';
+export type LiquidacionType = 'Favor Empresa' | 'Favor Trabajador' | 'Equilibrado';
+
+export interface LiquidacionInfo {
+  status: LiquidacionStatus;
+  type?: LiquidacionType;
+  monto?: number; // Monto liquidado / devuelto / reembolsado
+  voucherPhoto?: string; // base64 o referencia de recibo / uñero / voucher de pago
+  hasVoucher?: boolean;
+  voucherObs?: string; // N° operación, notas de liquidación
+  fecha?: string; // YYYY-MM-DD
+  carriedOverToId?: string; // ID de la rendición a la que se traspasó
+  carriedOverToName?: string;
+  carriedOverFromId?: string; // ID de la rendición de la que proviene
+  carriedOverFromName?: string;
+  carriedOverAmount?: number; // Saldo heredado
+}
 
 export interface Comprobante {
   id: string;
@@ -36,6 +53,10 @@ export interface Rendicion {
   signature?: string; // base64
   ingresos?: Ingreso[];
   rendicionType?: string;
+  liquidacion?: LiquidacionInfo;
+  previousBalance?: number; // Saldo a favor/contra arrastrado de la rendición anterior
+  previousBalanceSourceId?: string;
+  previousBalanceSourceName?: string;
 }
 
 export interface AppSettings {

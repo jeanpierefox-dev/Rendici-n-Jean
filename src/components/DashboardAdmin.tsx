@@ -4,11 +4,12 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { exportToPDF, exportToExcel, exportSingleRendicionPDF, exportRendicionReceiptsPDF, formatPhotoDataUrl, fetchPhotoForComprobante } from '../lib/export';
-import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp, FileText, ShieldCheck, Trash2, Loader2, Paperclip, Upload } from 'lucide-react';
+import { Check, X, Eye, Download, FileSpreadsheet, ChevronDown, ChevronUp, FileText, ShieldCheck, Trash2, Loader2, Paperclip, Upload, DollarSign, ArrowRightLeft } from 'lucide-react';
 import { Rendicion, Comprobante } from '../types';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { formatLocalDate, fileToBase64, compressImageToBase64 } from '../lib/utils';
+import { ModalLiquidacion } from './ModalLiquidacion';
 
 export function DashboardAdmin() {
   const { rendiciones, settings, updateRendicionStatus, deleteRendicion } = useAppStore();
@@ -17,6 +18,7 @@ export function DashboardAdmin() {
   const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null);
   const [uploadingCompId, setUploadingCompId] = useState<string | null>(null);
   const [generatingPdfKey, setGeneratingPdfKey] = useState<string | null>(null);
+  const [liquidatingRendicion, setLiquidatingRendicion] = useState<Rendicion | null>(null);
 
   const handleDirectUploadAttachment = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -241,6 +243,7 @@ export function DashboardAdmin() {
                 <th className="px-6 py-4">Usuario</th>
                 <th className="px-6 py-4">Docs</th>
                 <th className="px-6 py-4">Monto Total</th>
+                <th className="px-6 py-4">Liquidación</th>
                 <th className="px-6 py-4">Fecha Reg.</th>
                 <th className="px-6 py-4">Estado</th>
                 <th className="px-6 py-4 text-right">Acciones</th>
@@ -272,6 +275,36 @@ export function DashboardAdmin() {
                           Adelanto: S/ {rendicion.advanceAmount.toFixed(2)}
                           {rendicion.advanceDate && ` (F. Desembolso: ${format(new Date(rendicion.advanceDate + 'T00:00:00'), 'dd/MM/yyyy')})`}
                         </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {rendicion.liquidacion?.status === 'Liquidado' ? (
+                        <button
+                          onClick={() => setLiquidatingRendicion(rendicion)}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 transition-colors cursor-pointer"
+                          title="Ver detalle del voucher / uñero de liquidación"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                          Liquidado (S/ 0.00)
+                        </button>
+                      ) : rendicion.liquidacion?.status === 'Traspasado' ? (
+                        <button
+                          onClick={() => setLiquidatingRendicion(rendicion)}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-300 hover:bg-blue-200 transition-colors cursor-pointer"
+                          title="Ver detalle del traspaso de saldo"
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5 mr-1 text-blue-600" />
+                          Traspasado
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setLiquidatingRendicion(rendicion)}
+                          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition-colors cursor-pointer"
+                          title="Liquidar o traspasar saldo de la rendición"
+                        >
+                          <DollarSign className="w-3.5 h-3.5 mr-1 text-amber-600" />
+                          Liquidar Saldo
+                        </button>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-500">
@@ -537,6 +570,17 @@ export function DashboardAdmin() {
                                 </>
                               )}
                             </button>
+
+                            <button
+                              onClick={() => setLiquidatingRendicion(rendicion)}
+                              className="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer shadow-2xs"
+                              title="Gestionar liquidación a S/ 0 (devolución uñero o reembolso) o traspasar saldo"
+                            >
+                              <ShieldCheck className="w-4 h-4" />
+                              {rendicion.liquidacion?.status === 'Liquidado' 
+                                ? 'Ver / Modificar Liquidación' 
+                                : 'Liquidar / Uñero / Reembolso'}
+                            </button>
                             <button
                               onClick={() => handleDelete(rendicion.id, rendicion.name)}
                               className="inline-flex items-center px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-red-200/50"
@@ -563,6 +607,14 @@ export function DashboardAdmin() {
           </table>
         </div>
       </div>
+
+      {/* Modal de Liquidación / Uñero / Reembolso / Traspaso */}
+      {liquidatingRendicion && (
+        <ModalLiquidacion
+          rendicion={liquidatingRendicion}
+          onClose={() => setLiquidatingRendicion(null)}
+        />
+      )}
 
       {/* Image / Attachment Modal */}
       {selectedImage && (

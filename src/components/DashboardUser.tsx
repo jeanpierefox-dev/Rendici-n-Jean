@@ -7,13 +7,14 @@ import {
   FolderOpen, PlusCircle, Clock, CheckCircle2, XCircle, 
   FileText, ChevronDown, ChevronUp, Calendar, Pencil, 
   Coins, Landmark, AlertCircle, ArrowRight, Loader2, Paperclip,
-  Eye, Download, X, Upload
+  Eye, Download, X, Upload, ShieldCheck, DollarSign, ArrowRightLeft
 } from 'lucide-react';
 import { exportToPDF, exportSingleRendicionPDF, exportRendicionReceiptsPDF, formatPhotoDataUrl, fetchPhotoForComprobante } from '../lib/export';
 import { Rendicion, Comprobante } from '../types';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { formatLocalDate, fileToBase64, compressImageToBase64 } from '../lib/utils';
+import { ModalLiquidacion } from './ModalLiquidacion';
 
 export function DashboardUser() {
   const { rendiciones, currentUser, settings } = useAppStore();
@@ -22,6 +23,7 @@ export function DashboardUser() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null);
   const [uploadingCompId, setUploadingCompId] = useState<string | null>(null);
+  const [liquidatingRendicion, setLiquidatingRendicion] = useState<Rendicion | null>(null);
 
   const handleDirectUploadAttachment = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -259,7 +261,37 @@ export function DashboardUser() {
                     </div>
 
                     {/* Actions and Status Column */}
-                    <div className="flex items-center space-x-4 shrink-0">
+                    <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
+                      {/* Liquidación status badge */}
+                      {rendicion.liquidacion?.status === 'Liquidado' ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setLiquidatingRendicion(rendicion); }}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-200 transition-colors cursor-pointer"
+                          title="Ver constancia de liquidación"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                          <span className="hidden sm:inline">Liquidado</span> (0.00)
+                        </button>
+                      ) : rendicion.liquidacion?.status === 'Traspasado' ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setLiquidatingRendicion(rendicion); }}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300 hover:bg-blue-200 transition-colors cursor-pointer"
+                          title="Ver traspaso"
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5 mr-1 text-blue-600" />
+                          Traspasado
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setLiquidatingRendicion(rendicion); }}
+                          className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition-colors cursor-pointer"
+                          title="Liquidar o traspasar saldo"
+                        >
+                          <DollarSign className="w-3.5 h-3.5 mr-1 text-amber-600" />
+                          <span className="hidden sm:inline">Liquidar</span> Saldo
+                        </button>
+                      )}
+
                       {/* Status badge */}
                       <div className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wide shrink-0 ${getStatusClass(rendicion.status)}`}>
                         {getStatusIcon(rendicion.status)}
@@ -417,6 +449,17 @@ export function DashboardUser() {
                               <Pencil className="w-3.5 h-3.5 text-gray-600" />
                               Editar / Agregar Comprobantes
                             </Link>
+
+                            {/* Liquidar Button */}
+                            <button
+                              onClick={() => setLiquidatingRendicion(rendicion)}
+                              className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              {rendicion.liquidacion?.status === 'Liquidado' 
+                                ? 'Ver / Modificar Liquidación' 
+                                : 'Liquidar / Uñero / Reembolso'}
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -511,6 +554,14 @@ export function DashboardUser() {
           </div>
         )}
       </div>
+
+      {/* Modal de Liquidación / Uñero / Reembolso / Traspaso */}
+      {liquidatingRendicion && (
+        <ModalLiquidacion
+          rendicion={liquidatingRendicion}
+          onClose={() => setLiquidatingRendicion(null)}
+        />
+      )}
 
       {/* Attachment Viewer Modal */}
       {selectedImage && (

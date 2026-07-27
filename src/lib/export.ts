@@ -450,7 +450,7 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   const totalGastado = rendicion.comprobantes.reduce((sum, c) => sum + c.amount, 0);
   
   // Backward compatibility check for ingresos
-  const ingresosList: Ingreso[] = rendicion.ingresos && rendicion.ingresos.length > 0 
+  const baseIngresosList: Ingreso[] = rendicion.ingresos && rendicion.ingresos.length > 0 
     ? rendicion.ingresos 
     : (rendicion.advanceAmount > 0 
       ? [{
@@ -460,6 +460,17 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
           reference: 'Monto Inicial Desembolsado'
         }] 
       : []);
+
+  const prevBal = rendicion.previousBalance || 0;
+  const ingresosList = [...baseIngresosList];
+  if (prevBal !== 0) {
+    ingresosList.unshift({
+      id: 'prev_balance',
+      amount: prevBal,
+      date: rendicion.createdAt.split('T')[0],
+      reference: `Saldo Arrastrado Anterior ${rendicion.previousBalanceSourceName ? `(${rendicion.previousBalanceSourceName})` : ''}`
+    });
+  }
       
   const totalRecibido = ingresosList.reduce((sum, ing) => sum + ing.amount, 0);
   const balance = totalRecibido - totalGastado;
@@ -684,7 +695,46 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
     }
   });
 
-  let finalY = (doc as any).lastAutoTable.finalY + 10;
+  let finalY = (doc as any).lastAutoTable.finalY + 8;
+
+  // LIQUIDATION / CONCILIATION DETAILS BOX
+  if (rendicion.liquidacion) {
+    if (finalY > 210) {
+      doc.addPage();
+      finalY = 20;
+    }
+
+    const liq = rendicion.liquidacion;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 58, 138);
+    doc.text('ESTADO DE LIQUIDACIÓN Y CONCILIACIÓN FINAL', 14, finalY);
+
+    doc.setFillColor(243, 244, 246);
+    doc.setDrawColor(209, 213, 219);
+    doc.rect(14, finalY + 3, pageWidth - 28, 22, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(31, 41, 55);
+
+    const liqStatusStr = liq.status === 'Liquidado' ? 'LIQUIDADO A S/ 0.00' : 'TRASPASADO A OTRA RENDICIÓN';
+    const liqTypeStr = liq.type === 'Favor Empresa' 
+      ? 'Devolución de excedente a Empresa (Uñero)' 
+      : 'Reembolso pagado al Trabajador (Voucher)';
+
+    doc.text(`Estado Final: ${liqStatusStr}`, 18, finalY + 8);
+    doc.text(`Modalidad: ${liqTypeStr}`, 18, finalY + 13);
+    doc.text(`N° Ref / Obs: ${liq.voucherObs || 'N/A'}`, 18, finalY + 18);
+
+    doc.text(`Monto Conciliado: S/ ${(liq.monto || 0).toFixed(2)}`, 110, finalY + 8);
+    doc.text(`Fecha Liquidación: ${liq.fecha ? format(new Date(liq.fecha + 'T00:00:00'), 'dd/MM/yyyy') : 'N/A'}`, 110, finalY + 13);
+    if (liq.carriedOverToName) {
+      doc.text(`Destino Traspaso: ${liq.carriedOverToName}`, 110, finalY + 18);
+    }
+
+    finalY += 30;
+  }
 
   // Prevent overlap if signature goes off page
   if (finalY > 230) {

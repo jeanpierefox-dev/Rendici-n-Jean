@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../lib/store';
 import { useNavigate, useParams } from 'react-router';
 import { fileToBase64, compressImageToBase64, formatLocalDate, safeUUID, recompressBase64Image } from '../lib/utils';
-import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2, Edit3, DollarSign, Calendar, Tag, Eye, Paperclip, Download, X } from 'lucide-react';
+import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2, Edit3, DollarSign, Calendar, Tag, Eye, Paperclip, Download, X, ArrowRightLeft } from 'lucide-react';
 import { Comprobante, DocType, Rendicion, Ingreso } from '../types';
 import { format } from 'date-fns';
 import { doc, setDoc } from 'firebase/firestore';
@@ -200,6 +200,11 @@ export function FormRendicion() {
   const [ingReference, setIngReference] = useState('');
   const [showIngForm, setShowIngForm] = useState(false);
   
+  // Previous carried-over balance fields
+  const [previousBalance, setPreviousBalance] = useState<number>(0);
+  const [previousBalanceSourceId, setPreviousBalanceSourceId] = useState<string | undefined>();
+  const [previousBalanceSourceName, setPreviousBalanceSourceName] = useState<string | undefined>();
+  
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   
@@ -212,6 +217,11 @@ export function FormRendicion() {
         setRendicionType(existing.rendicionType || 'Logístico');
         setComprobantes(existing.comprobantes || []);
         setSignature(existing.signature);
+        if (existing.previousBalance !== undefined) {
+          setPreviousBalance(existing.previousBalance);
+          setPreviousBalanceSourceId(existing.previousBalanceSourceId);
+          setPreviousBalanceSourceName(existing.previousBalanceSourceName);
+        }
         
         // Populate ingresos with on-the-fly migration for old records if needed
         if (existing.ingresos && existing.ingresos.length > 0) {
@@ -383,7 +393,10 @@ export function FormRendicion() {
         advanceDate: primaryDate,
         comprobantes: updatedComprobantes,
         ingresos: updatedIngresos,
-        signature: updatedSignature !== undefined ? updatedSignature : signature
+        signature: updatedSignature !== undefined ? updatedSignature : signature,
+        previousBalance,
+        previousBalanceSourceId,
+        previousBalanceSourceName
       };
       
       await updateRendicion(id, payload);
@@ -719,7 +732,14 @@ export function FormRendicion() {
       if (isEditing && id) {
         await updateRendicion(id, payload);
       } else {
-        await addRendicion(payload.name, payload.advanceAmount, payload.comprobantes, payload.signature, payload.advanceDate, payload.ingresos, rendicionType);
+        const newId = await addRendicion(payload.name, payload.advanceAmount, payload.comprobantes, payload.signature, payload.advanceDate, payload.ingresos, rendicionType);
+        if (previousBalance !== 0) {
+          await updateRendicion(newId, {
+            previousBalance,
+            previousBalanceSourceId,
+            previousBalanceSourceName
+          });
+        }
       }
       setLoading(false);
       setSuccess(true);
@@ -756,7 +776,8 @@ export function FormRendicion() {
   // Calculation of aggregates
   const totalGastado = comprobantes.reduce((sum, c) => sum + c.amount, 0);
   const totalIngresos = ingresos.reduce((sum, ing) => sum + ing.amount, 0);
-  const balance = totalIngresos - totalGastado;
+  const grandTotalIngresos = totalIngresos + previousBalance;
+  const balance = grandTotalIngresos - totalGastado;
   
   const balanceText = balance > 0 
     ? 'A favor de la empresa (Devolver)' 
@@ -807,7 +828,7 @@ export function FormRendicion() {
       </div>
 
       {/* BLOCK NAME GENERAL INFO */}
-      <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-6">
+      <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-semibold text-gray-800 mb-2">Nombre o Glosa de este Bloque</label>
@@ -836,6 +857,41 @@ export function FormRendicion() {
             </select>
           </div>
         </div>
+
+        {/* Carried over balance banner */}
+        {previousBalance !== 0 && (
+          <div className="pt-3 border-t border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-indigo-50/80 p-3.5 rounded-lg border border-indigo-200/80">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-indigo-100 text-indigo-700 rounded-lg shrink-0">
+                <ArrowRightLeft className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wide">
+                  Saldo Arrastrado {previousBalanceSourceName ? `desde "${previousBalanceSourceName}"` : ''}
+                </h4>
+                <p className="text-xs text-indigo-800 font-medium">
+                  {previousBalance > 0 
+                    ? `Saldo a favor de la empresa: +S/ ${previousBalance.toFixed(2)} (Suma a favor del dinero acumulado)` 
+                    : `Saldo a favor del trabajador: -S/ ${Math.abs(previousBalance).toFixed(2)} (Se descontará o reembolsará)`}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setPreviousBalance(0);
+                setPreviousBalanceSourceId(undefined);
+                setPreviousBalanceSourceName(undefined);
+                if (isEditing && id) {
+                  updateRendicion(id, { previousBalance: 0, previousBalanceSourceId: undefined, previousBalanceSourceName: undefined });
+                }
+              }}
+              className="text-xs font-bold text-red-600 hover:text-red-800 bg-white border border-red-200 px-3 py-1.5 rounded-lg shadow-2xs hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+            >
+              Quitar Arrastre
+            </button>
+          </div>
+        )}
       </div>
 
 
