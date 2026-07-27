@@ -509,7 +509,7 @@ export function DashboardAdmin() {
                               onClick={async () => {
                                 setGeneratingPdfKey(`${rendicion.id}_report`);
                                 try {
-                                  await exportSingleRendicionPDF(rendicion, settings, false);
+                                  await exportSingleRendicionPDF(rendicion, settings, true);
                                 } catch (err) {
                                   console.error(err);
                                   alert('Error al generar el reporte PDF.');
@@ -519,17 +519,17 @@ export function DashboardAdmin() {
                               }}
                               disabled={generatingPdfKey !== null}
                               className="inline-flex items-center px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-blue-200/50 disabled:opacity-50"
-                              title="Descargar Informe de Liquidación de Gastos (Puro informe sin recibos)"
+                              title="Descargar Reporte Completo de Liquidación con Archivos Adjuntos / Recibos"
                             >
                               {generatingPdfKey === `${rendicion.id}_report` ? (
                                 <>
                                   <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                                  Generando Informe...
+                                  Generando Reporte...
                                 </>
                               ) : (
                                 <>
                                   <FileText className="w-4 h-4 text-blue-600" />
-                                  Descargar Informe PDF
+                                  Descargar Reporte Completo (PDF)
                                 </>
                               )}
                             </button>

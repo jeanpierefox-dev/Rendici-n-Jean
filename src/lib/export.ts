@@ -32,13 +32,15 @@ export const fetchPhotoForComprobante = async (c: any): Promise<string | undefin
   const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
   const keysToTry: string[] = [];
   for (const k of rawKeys) {
-    const sanitized = k.replace(/\//g, '_');
-    keysToTry.push(sanitized);
-    if (sanitized !== k) {
-      keysToTry.push(k);
-    }
     const trimmed = k.trim();
-    if (!keysToTry.includes(trimmed)) keysToTry.push(trimmed);
+    const sanitized = k.replace(/\//g, '_');
+    const trimmedSanitized = trimmed.replace(/\//g, '_');
+    
+    [sanitized, k, trimmed, trimmedSanitized].forEach(key => {
+      if (key && !keysToTry.includes(key)) {
+        keysToTry.push(key);
+      }
+    });
   }
   for (const key of keysToTry) {
     try {
