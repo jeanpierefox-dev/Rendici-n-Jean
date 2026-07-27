@@ -59,6 +59,14 @@ export function DashboardUser() {
         comprobantes: updatedComprobantes
       });
 
+      // Keep base64Photo in local state so it is instantly available for viewing and PDF export
+      useAppStore.setState(state => ({
+        rendiciones: state.rendiciones.map(r => r.id === rendicion.id ? {
+          ...r,
+          comprobantes: updatedComprobantes
+        } : r)
+      }));
+
       alert('¡Copia digital del recibo adjuntada con éxito! Quedará visible al lado derecho de la Hoja Fedatada en el reporte PDF.');
     } catch (err) {
       console.error("Error uploading attachment:", err);

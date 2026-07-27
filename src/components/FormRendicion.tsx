@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../lib/store';
 import { useNavigate, useParams } from 'react-router';
 import { fileToBase64, compressImageToBase64, formatLocalDate, safeUUID, recompressBase64Image } from '../lib/utils';
-import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2, Edit3, DollarSign, Calendar, Tag } from 'lucide-react';
+import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2, Edit3, DollarSign, Calendar, Tag, Eye, Paperclip, Download, X } from 'lucide-react';
 import { Comprobante, DocType, Rendicion, Ingreso } from '../types';
 import { format } from 'date-fns';
 import { doc, setDoc } from 'firebase/firestore';
@@ -43,11 +43,14 @@ export function FormRendicion() {
   const [rucError, setRucError] = useState('');
   const [emisorDocType, setEmisorDocType] = useState<'RUC' | 'DNI'>('RUC');
 
-  // File Upload confirmation states
+  // File Upload confirmation & Modal states
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [uploadedFileSize, setUploadedFileSize] = useState<string | null>(null);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [fileSuccessMsg, setFileSuccessMsg] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null);
+  const [uploadingCompId, setUploadingCompId] = useState<string | null>(null);
 
   // Deterministic fallback Peru business/person name generator for smooth offline / iframe experiences
   const getDeterministicFallback = (docNum: string, type: 'RUC' | 'DNI') => {
@@ -274,7 +277,87 @@ export function FormRendicion() {
     }
   };
 
-  // Safe auto-save to Firestore stripping out undefined values
+  // Handle viewing attached photo or fetching from Firestore if missing from state
+  const handleViewComprobantePhoto = async (c: Comprobante) => {
+    if (c.receiptPhoto) {
+      const formatted = formatPhotoDataUrl(c.receiptPhoto);
+      setSelectedImage(formatted);
+      return;
+    }
+    
+    const targetKey = c.id || c.documentNumber;
+    if (!targetKey) {
+      alert('Este comprobante no cuenta con un identificador válido para cargar el archivo.');
+      return;
+    }
+
+    setLoadingPhotoId(targetKey);
+    try {
+      const photo = await fetchPhotoForComprobante(c);
+      if (photo) {
+        const formatted = formatPhotoDataUrl(photo);
+        setComprobantes(prev => prev.map(item => {
+          const isMatch = (item.id && item.id === c.id) || (item.documentNumber && item.documentNumber === c.documentNumber);
+          return isMatch ? { ...item, receiptPhoto: formatted, hasPhoto: true } : item;
+        }));
+        setSelectedImage(formatted);
+      } else {
+        alert('No se encontró el archivo adjunto en la base de datos.');
+      }
+    } catch (err) {
+      console.error('Error al obtener la foto del comprobante:', err);
+      alert('Error al consultar el archivo del comprobante.');
+    } finally {
+      setLoadingPhotoId(null);
+    }
+  };
+
+  const handleTableDirectUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    index: number,
+    c: Comprobante
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const targetKey = c.id || c.documentNumber || index.toString();
+    setUploadingCompId(targetKey);
+    try {
+      let base64Photo = '';
+      if (file.type === 'application/pdf') {
+        base64Photo = await fileToBase64(file);
+      } else {
+        base64Photo = await compressImageToBase64(file, 1200, 1600, 0.75);
+      }
+      base64Photo = formatPhotoDataUrl(base64Photo);
+
+      const updatedComprobantes = comprobantes.map((item, idx) => {
+        if (idx === index || (item.id && item.id === c.id) || (item.documentNumber && item.documentNumber === c.documentNumber)) {
+          return {
+            ...item,
+            receiptPhoto: base64Photo,
+            hasPhoto: true
+          };
+        }
+        return item;
+      });
+
+      setComprobantes(updatedComprobantes);
+
+      if (isEditing && id) {
+        await autoSaveBlock(updatedComprobantes, ingresos, signature);
+      }
+
+      alert('¡Copia digital del recibo adjuntada con éxito! Quedará visible en el detalle del comprobante y en el reporte PDF de recibos.');
+    } catch (err) {
+      console.error('Error al subir archivo:', err);
+      alert('Error al procesar el archivo del recibo.');
+    } finally {
+      setUploadingCompId(null);
+    }
+  };
+
+  // Safe auto-save to Firestore
   const autoSaveBlock = async (
     updatedComprobantes: Comprobante[],
     updatedIngresos: Ingreso[],
@@ -289,13 +372,8 @@ export function FormRendicion() {
     // Find earliest date or main date
     const primaryDate = updatedIngresos.length > 0 ? updatedIngresos[0].date : (new Date().toISOString().split('T')[0]);
 
-    // Clear heavy base64 strings from local state IMMEDIATELY to prevent UI lag while we wait for network sync
-    const clearedComprobantes = updatedComprobantes.map(c => ({
-      ...c,
-      receiptPhoto: undefined,
-      hasPhoto: c.hasPhoto || !!c.receiptPhoto
-    }));
-    setComprobantes(clearedComprobantes);
+    // Keep updatedComprobantes in local state so receiptPhoto is available for viewing & PDF export
+    setComprobantes(updatedComprobantes);
 
     try {
       const payload: any = {
@@ -936,7 +1014,7 @@ export function FormRendicion() {
                   <th className="px-5 py-3">RUC</th>
                   <th className="px-5 py-3">Categoría / Obs.</th>
                   <th className="px-5 py-3 text-right">Monto</th>
-                  <th className="px-5 py-3 text-right">Acciones</th>
+                  <th className="px-5 py-3 text-right">Recibo / Copia Digital</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
@@ -953,23 +1031,65 @@ export function FormRendicion() {
                       {c.observation && <span className="block text-xs text-gray-400 mt-0.5 max-w-[200px] truncate" title={c.observation}>{c.observation}</span>}
                     </td>
                     <td className="px-5 py-3 text-right font-semibold text-gray-900">S/ {c.amount.toFixed(2)}</td>
-                    <td className="px-5 py-3 text-right space-x-1">
-                      <button 
-                        type="button"
-                        onClick={() => handleEditComprobante(c)} 
-                        className="text-blue-500 hover:text-blue-700 p-1.5 inline-flex hover:bg-blue-50 rounded"
-                        title="Editar Documento"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => removeDocument(i)} 
-                        className="text-red-500 hover:text-red-700 p-1.5 inline-flex hover:bg-red-50 rounded"
-                        title="Eliminar Documento"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <td className="px-5 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {(c.receiptPhoto || c.hasPhoto) && (
+                          <button 
+                            type="button"
+                            onClick={() => handleViewComprobantePhoto(c)}
+                            disabled={loadingPhotoId === (c.id || c.documentNumber)}
+                            className="inline-flex items-center text-blue-600 hover:text-blue-800 text-xs font-semibold px-2 py-1 rounded bg-blue-50 hover:bg-blue-100 border border-blue-200/80 transition-colors disabled:opacity-50 cursor-pointer"
+                            title="Ver recibo o copia digital adjunta"
+                          >
+                            {loadingPhotoId === (c.id || c.documentNumber) ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> Cargando...
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="w-3.5 h-3.5 mr-1" /> Ver Recibo
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        <label className={`inline-flex items-center text-xs font-semibold px-2 py-1 rounded transition-colors cursor-pointer border ${uploadingCompId === (c.id || c.documentNumber) ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'}`} title="Adjuntar o reemplazar archivo del recibo (Imagen o PDF)">
+                          {uploadingCompId === (c.id || c.documentNumber) ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin text-emerald-600" /> Subiendo...
+                            </>
+                          ) : (
+                            <>
+                              <Paperclip className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                              {c.receiptPhoto || c.hasPhoto ? 'Cambiar Recibo' : '📎 Adjuntar Recibo'}
+                            </>
+                          )}
+                          <input 
+                            type="file" 
+                            accept="image/*,application/pdf" 
+                            className="hidden" 
+                            disabled={uploadingCompId !== null}
+                            onChange={(e) => handleTableDirectUpload(e, i, c)} 
+                          />
+                        </label>
+
+                        <button 
+                          type="button"
+                          onClick={() => handleEditComprobante(c)} 
+                          className="text-blue-500 hover:text-blue-700 p-1.5 inline-flex hover:bg-blue-50 rounded cursor-pointer"
+                          title="Editar Documento"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => removeDocument(i)} 
+                          className="text-red-500 hover:text-red-700 p-1.5 inline-flex hover:bg-red-50 rounded cursor-pointer"
+                          title="Eliminar Documento"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1244,9 +1364,18 @@ export function FormRendicion() {
                         <span className="text-[10px] text-slate-500 block">
                           {uploadedFileSize ? `Tamaño: ${uploadedFileSize}` : 'Imagen lista'}
                         </span>
-                        <span className="inline-inline-flex items-center px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded mt-1">
-                          ✓ Listo para PDF
-                        </span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="inline-flex items-center px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded">
+                            ✓ Listo para PDF
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedImage(receiptPhoto)}
+                            className="inline-flex items-center text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded border border-blue-200 transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3 mr-1" /> Ver Completo
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1262,9 +1391,18 @@ export function FormRendicion() {
                         <span className="text-[10px] text-blue-700 block">
                           Archivo PDF adjunto
                         </span>
-                        <span className="inline-inline-flex items-center px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded mt-1">
-                          ✓ Documento adjunto
-                        </span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="inline-flex items-center px-1.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded">
+                            ✓ Documento adjunto
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedImage(receiptPhoto)}
+                            className="inline-flex items-center text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-blue-100 hover:bg-blue-200 px-2 py-0.5 rounded border border-blue-300 transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3 mr-1" /> Ver PDF
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1379,6 +1517,54 @@ export function FormRendicion() {
           {loading ? 'Guardando...' : (isEditing ? 'Guardar Cambios' : 'Enviar Bloque de Rendición')}
         </button>
       </div>
+
+      {/* --- MODAL PARA VISUALIZAR COMPROBANTE / RECIBO ATTACHMENT --- */}
+      {selectedImage && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200">
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-5 h-5 text-blue-400" />
+                <h3 className="font-bold text-sm sm:text-base tracking-wide">Vista Detallada del Comprobante / Recibo Adjunto</h3>
+              </div>
+              <div className="flex items-center space-x-2">
+                <a
+                  href={selectedImage}
+                  download={`comprobante_${Date.now()}.${selectedImage.startsWith('data:application/pdf') ? 'pdf' : 'jpg'}`}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold inline-flex items-center transition-colors shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5 mr-1.5" /> Descargar Archivo
+                </a>
+                <button
+                  onClick={() => setSelectedImage(null)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Cerrar ventana"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-4 overflow-auto flex-1 flex justify-center items-center bg-slate-950/90 min-h-[300px]">
+              {selectedImage.startsWith('data:application/pdf') ? (
+                <iframe
+                  src={selectedImage}
+                  title="Vista previa PDF"
+                  className="w-full h-[70vh] rounded-lg bg-white border-0"
+                />
+              ) : (
+                <img
+                  src={selectedImage}
+                  alt="Comprobante Adjunto"
+                  className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-xl"
+                />
+              )}
+            </div>
+            <div className="p-3 bg-slate-100 border-t border-slate-200 text-center text-xs text-slate-600 font-medium">
+              Este archivo está correctamente vinculado a tu comprobante y se incluirá en el reporte en PDF de recibos.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
