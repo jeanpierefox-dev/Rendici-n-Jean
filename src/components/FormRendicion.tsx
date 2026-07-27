@@ -1255,7 +1255,7 @@ export function FormRendicion() {
               </div>
             </div>
             
-            <div className="mt-5 flex justify-end space-x-2">
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
               {comprobantes.length > 0 && (
                 <button 
                   type="button" 
@@ -1265,9 +1265,23 @@ export function FormRendicion() {
                   Cancelar
                 </button>
               )}
+              
+              <button 
+                type="button" 
+                onClick={(e) => {
+                  setFileSuccessMsg("¡Comprobante y archivo cargados exitosamente al Reporte PDF de Recibos!");
+                  addOrUpdateDocument(e);
+                }}
+                className="px-4 py-2 text-sm font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 rounded-lg transition-colors flex items-center shadow-xs cursor-pointer gap-1.5"
+                title="Cargar y vincular este recibo directamente al reporte PDF de recibos (Hojas Fedatadas)"
+              >
+                <Paperclip className="w-4 h-4 text-emerald-700" />
+                Cargar al Reporte PDF de Recibos
+              </button>
+
               <button 
                 type="submit" 
-                className="px-4 py-2 text-sm font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors flex items-center"
+                className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center shadow-xs cursor-pointer"
               >
                 {editingComprobanteId ? 'Actualizar Comprobante' : 'Añadir Comprobante'}
               </button>

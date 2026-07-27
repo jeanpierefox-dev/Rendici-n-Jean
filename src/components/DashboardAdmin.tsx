@@ -177,14 +177,30 @@ export function DashboardAdmin() {
                 alert("Error al generar el reporte PDF.");
               }
             }}
-            className="flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm cursor-pointer"
+            className="flex items-center px-3.5 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm cursor-pointer"
+            title="Descargar Resumen General de Rendiciones en PDF"
           >
-            <Download className="w-4 h-4 mr-2" />
-            Reporte PDF
+            <Download className="w-4 h-4 mr-2 text-blue-600" />
+            Reporte PDF (Resumen)
+          </button>
+          <button 
+            onClick={async () => {
+              try {
+                await exportRendicionReceiptsPDF(rendiciones, settings);
+              } catch (e: any) {
+                console.error("Error exporting receipts PDF", e);
+                alert(e.message || "Error al generar el reporte de recibos PDF.");
+              }
+            }}
+            className="flex items-center px-3.5 py-2 bg-emerald-50 border border-emerald-300/80 rounded-md text-sm font-bold text-emerald-800 hover:bg-emerald-100 transition-colors shadow-sm cursor-pointer"
+            title="Descargar Recibos Adjuntos en Hojas Fedatadas (PDF)"
+          >
+            <Paperclip className="w-4 h-4 mr-2 text-emerald-700" />
+            Reporte Recibos (PDF)
           </button>
           <button 
             onClick={() => exportToExcel(rendiciones, settings)}
-            className="flex items-center px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 transition-colors shadow-sm"
+            className="flex items-center px-3.5 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 transition-colors shadow-sm"
           >
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Reporte Excel

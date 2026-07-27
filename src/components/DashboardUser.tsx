@@ -154,7 +154,7 @@ export function DashboardUser() {
             Revisa, gestiona y reporta tus gastos organizados en bloques de rendición.
           </p>
         </div>
-        <div className="flex gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap gap-2.5 w-full sm:w-auto">
           <button 
             onClick={async () => {
               try {
@@ -164,15 +164,30 @@ export function DashboardUser() {
                 alert("Error al generar el reporte PDF.");
               }
             }}
-            className="flex-1 sm:flex-none text-center px-4 py-2.5 bg-white border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer shadow-xs"
+            className="flex-1 sm:flex-none text-center px-3.5 py-2.5 bg-white border border-gray-300 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer shadow-xs"
+            title="Exportar Resumen General de mis Rendiciones en PDF"
           >
-            Exportar Todos PDF
+            Exportar Resumen (PDF)
+          </button>
+          <button 
+            onClick={async () => {
+              try {
+                await exportRendicionReceiptsPDF(myRendiciones, settings);
+              } catch (e: any) {
+                console.error("Error exporting receipts PDF", e);
+                alert(e.message || "Error al generar el reporte de recibos PDF.");
+              }
+            }}
+            className="flex-1 sm:flex-none text-center px-3.5 py-2.5 bg-emerald-50 border border-emerald-300/80 rounded-lg text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer shadow-xs"
+            title="Exportar Todos los Recibos Adjuntos en Hojas Fedatadas (PDF)"
+          >
+            Exportar Recibos (PDF)
           </button>
           <Link 
             to="/new" 
-            className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-xs"
+            className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors shadow-xs"
           >
-            <PlusCircle className="w-4.5 h-4.5 mr-2" />
+            <PlusCircle className="w-4 h-4 mr-1.5" />
             Nuevo Bloque
           </Link>
         </div>

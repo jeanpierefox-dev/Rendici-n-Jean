@@ -69,7 +69,7 @@ export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSetting
   }));
 
   if (updatedRendiciones.length === 1) {
-    await exportSingleRendicionPDF(updatedRendiciones[0], settings, true);
+    await exportSingleRendicionPDF(updatedRendiciones[0], settings, false);
     return;
   }
 
@@ -389,7 +389,7 @@ const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; form
   });
 };
 
-export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = true) => {
+export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = false) => {
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
     const photo = await fetchPhotoForComprobante(c);
@@ -919,57 +919,63 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   doc.save(`Rendicion_${sanitizedBlockName}_${rendicion.userName.replace(' ', '_')}.pdf`);
 };
 
-export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, settings: AppSettings) => {
+export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion | Rendicion[], settings: AppSettings) => {
+  const rendicionesList = Array.isArray(storeRendicion) ? storeRendicion : [storeRendicion];
+
+  if (rendicionesList.length === 0) {
+    throw new Error("No hay rendiciones para exportar recibos.");
+  }
+
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
-  const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
-    const photo = await fetchPhotoForComprobante(c);
-    return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
+  const updatedRendiciones = await Promise.all(rendicionesList.map(async (r) => {
+    const updatedComprobantes = await Promise.all(r.comprobantes.map(async (c) => {
+      const photo = await fetchPhotoForComprobante(c);
+      return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
+    }));
+    return { ...r, comprobantes: updatedComprobantes };
   }));
 
   // Update store ONCE in one single batch!
-  const hasNewPhotos = updatedComprobantes.some((c, i) => c.receiptPhoto !== storeRendicion.comprobantes[i].receiptPhoto);
-  if (hasNewPhotos) {
-    useAppStore.setState(state => ({
-      rendiciones: state.rendiciones.map(r => r.id === storeRendicion.id ? {
-        ...r,
-        comprobantes: updatedComprobantes
-      } : r)
-    }));
-  }
-
-  // Pre-process all photos via Canvas to guarantee valid JPEG data URLs and exact dimensions
-  const processedComprobantes = await Promise.all(updatedComprobantes.map(async (c) => {
-    if (c.receiptPhoto) {
-      const processed = await ensureCanvasDataUrl(c.receiptPhoto);
-      return {
-        ...c,
-        processedPhoto: processed.dataUrl,
-        photoFormat: processed.format,
-        photoWidth: processed.width,
-        photoHeight: processed.height
-      };
-    }
-    return c;
+  useAppStore.setState(state => ({
+    rendiciones: state.rendiciones.map(r => {
+      const updated = updatedRendiciones.find(ur => ur.id === r.id);
+      return updated ? updated : r;
+    })
   }));
 
-  // Create a safe copy of the rendicion object to avoid mutating frozen store objects
-  const rendicion: Rendicion = {
-    ...storeRendicion,
-    comprobantes: processedComprobantes
-  };
+  // Collect all processed items with parent rendicion context
+  const itemsToRender: { rendicion: Rendicion; c: Comprobante }[] = [];
+
+  for (const r of updatedRendiciones) {
+    const processedComprobantes = await Promise.all(r.comprobantes.map(async (c) => {
+      if (c.receiptPhoto) {
+        const processed = await ensureCanvasDataUrl(c.receiptPhoto);
+        return {
+          ...c,
+          processedPhoto: processed.dataUrl,
+          photoFormat: processed.format,
+          photoWidth: processed.width,
+          photoHeight: processed.height
+        };
+      }
+      return c;
+    }));
+
+    for (const c of processedComprobantes) {
+      itemsToRender.push({ rendicion: r, c });
+    }
+  }
+
+  if (itemsToRender.length === 0) {
+    throw new Error("No hay comprobantes registrados en la(s) rendición(es) seleccionada(s).");
+  }
 
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  const comprobantesToRender = rendicion.comprobantes;
-  
-  if (comprobantesToRender.length === 0) {
-    throw new Error("No hay comprobantes registrados en esta rendición.");
-  }
-
   // Draw receipts as Hoja Fedatada
-  for (let idx = 0; idx < comprobantesToRender.length; idx++) {
-    const c = comprobantesToRender[idx];
+  for (let idx = 0; idx < itemsToRender.length; idx++) {
+    const { rendicion, c } = itemsToRender[idx];
     if (idx > 0) {
       doc.addPage();
     }
@@ -1148,6 +1154,11 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion, sett
     }
   }
 
-  const sanitizedBlockName = rendicion.name.replace(/[^a-zA-Z0-9]/g, '_');
-  doc.save(`Recibos_${sanitizedBlockName}_${rendicion.userName.replace(' ', '_')}.pdf`);
+  if (Array.isArray(storeRendicion) && storeRendicion.length > 1) {
+    doc.save(`Reporte_Consolidado_Recibos.pdf`);
+  } else {
+    const singleR = Array.isArray(storeRendicion) ? storeRendicion[0] : storeRendicion;
+    const sanitizedBlockName = singleR.name.replace(/[^a-zA-Z0-9]/g, '_');
+    doc.save(`Recibos_${sanitizedBlockName}_${singleR.userName.replace(/\s+/g, '_')}.pdf`);
+  }
 };
