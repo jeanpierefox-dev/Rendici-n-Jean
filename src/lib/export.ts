@@ -75,201 +75,172 @@ export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSetting
 
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   
+  // Calculations for consolidated summary
+  let totalGeneral = 0;
+  let totalAdelanto = 0;
+  let totalComprobantes = 0;
+
+  updatedRendiciones.forEach(r => {
+    totalAdelanto += (r.advanceAmount || 0);
+    r.comprobantes.forEach(c => {
+      totalGeneral += c.amount;
+      totalComprobantes++;
+    });
+  });
+
+  const saldoNeto = Math.abs(totalAdelanto - totalGeneral);
+  const esDevolucion = totalAdelanto >= totalGeneral;
+
   // Header Logo
   if (settings.companyLogo) {
     try {
-      doc.addImage(settings.companyLogo, 'PNG', 14, 10, 40, 20);
+      doc.addImage(settings.companyLogo, 'PNG', 14, 10, 38, 18);
     } catch (e) {
       console.warn("Could not add logo to PDF");
     }
   }
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
+  doc.setFontSize(15);
   doc.setTextColor(30, 58, 138);
-  doc.text('REPORTE CONSOLIDADO DE RENDICIONES', 14, 38);
+  doc.text('REPORTE CONSOLIDADO DE RENDICIONES Y GASTOS', 14, 34);
   
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(107, 114, 128);
-  doc.text(`Empresa: ${(settings.companyName || 'Empresa').toUpperCase()}`, 14, 44);
-  doc.text(`Fecha de emisión: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 49);
+  doc.text(`Empresa: ${(settings.companyName || 'Empresa').toUpperCase()}`, 14, 40);
+  doc.text(`Fecha de emisión: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 14, 45);
 
-  // Table summary
-  const tableColumn = ["Bloque", "Usuario", "Tipo Doc.", "Número", "RUC", "Fecha Doc.", "Monto"];
-  const tableRows: any[] = [];
-  let total = 0;
+  // Executive Summary Card / Total Box
+  doc.setFillColor(239, 246, 255); // Light blue tint
+  doc.setDrawColor(191, 219, 254);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(14, 49, pageWidth - 28, 26, 2, 2, 'FD');
 
-  const allComprobantesWithMeta: Array<{ rendicion: Rendicion; comprobante: any }> = [];
-
-  updatedRendiciones.forEach(r => {
-    r.comprobantes.forEach(c => {
-      total += c.amount;
-      tableRows.push([
-        r.name,
-        r.userName,
-        c.type,
-        c.documentNumber,
-        c.ruc,
-        formatLocalDate(c.date),
-        `S/ ${c.amount.toFixed(2)}`
-      ]);
-      allComprobantesWithMeta.push({ rendicion: r, comprobante: c });
-    });
-  });
-
-  autoTable(doc, {
-    head: [tableColumn],
-    body: tableRows,
-    startY: 54,
-    theme: 'striped',
-    styles: { font: 'helvetica', fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [249, 250, 251] },
-  });
-
-  const finalY = (doc as any).lastAutoTable.finalY || 60;
-  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(31, 41, 55);
-  doc.text(`TOTAL GENERAL CONSOLIDADO: S/ ${total.toFixed(2)}`, 14, finalY + 10);
+  doc.setFontSize(11);
+  doc.setTextColor(30, 58, 138);
+  doc.text(`GASTO TOTAL CONSOLIDADO DEL MES / PERÍODO: S/ ${totalGeneral.toFixed(2)}`, 18, 56);
 
-  // Attach Hoja Fedatada pages for every comprobante with a photo/attachment
-  let pageCount = 0;
-  for (let idx = 0; idx < allComprobantesWithMeta.length; idx++) {
-    const { rendicion: r, comprobante: c } = allComprobantesWithMeta[idx];
-    let photoSrc = c.receiptPhoto;
-    if (photoSrc) {
-      pageCount++;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(55, 65, 81);
+  doc.text(`Bloques de Rendición: ${updatedRendiciones.length}  |  Total Comprobantes: ${totalComprobantes}  |  Adelanto Total Recibido: S/ ${totalAdelanto.toFixed(2)}`, 18, 63);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(esDevolucion ? 22 : 180, esDevolucion ? 101 : 83, esDevolucion ? 52 : 9); // Emerald vs Amber
+  doc.text(`Saldo Consolidado: S/ ${saldoNeto.toFixed(2)} (${esDevolucion ? 'Saldo a Devolver a la Empresa' : 'Saldo a Reembolsar al Colaborador'})`, 18, 70);
+
+  let currentY = 82;
+
+  // Render each block as a distinct framed box / card
+  for (let bIdx = 0; bIdx < updatedRendiciones.length; bIdx++) {
+    const r = updatedRendiciones[bIdx];
+    const totalBloque = r.comprobantes.reduce((sum, c) => sum + c.amount, 0);
+
+    // Check if enough vertical space exists on current page for block header + at least 3 table rows (~50mm)
+    if (currentY + 50 > pageHeight - 15) {
       doc.addPage();
-
-      // Outer & inner frame
-      doc.setDrawColor(30, 58, 138);
-      doc.setLineWidth(0.5);
-      doc.rect(8, 8, pageWidth - 16, doc.internal.pageSize.getHeight() - 16);
-      
-      doc.setDrawColor(229, 231, 235);
-      doc.setLineWidth(0.3);
-      doc.rect(10, 10, pageWidth - 20, doc.internal.pageSize.getHeight() - 20);
-      
-      // Header Annex
-      doc.setFillColor(243, 244, 246);
-      doc.rect(12, 12, pageWidth - 24, 22, 'F');
-      
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(30, 58, 138);
-      doc.text(`HOJA FEDATADA - ANEXO N° ${pageCount}`, 16, 20);
-      
-      doc.setFontSize(7.5);
-      doc.setTextColor(107, 114, 128);
-      doc.text(`Bloque: ${r.name} | Colaborador: ${r.userName}`, 16, 26);
-      
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(31, 41, 55);
-      doc.text(`${c.type} N° ${c.documentNumber}`, pageWidth - 16, 19, { align: 'right' });
-      
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(75, 85, 99);
-      doc.text(`RUC: ${c.ruc}  |  Fecha: ${formatLocalDate(c.date)}  |  Monto: S/ ${c.amount.toFixed(2)}`, pageWidth - 16, 25, { align: 'right' });
-      
-      doc.setDrawColor(209, 213, 219);
-      doc.line(12, 34, pageWidth - 12, 34);
-
-      // Left physical pasting box
-      const boxX = 12;
-      const boxY = 38;
-      const boxW = 74;
-      const boxH = 242;
-
-      doc.setDrawColor(156, 163, 175);
-      doc.setLineWidth(0.3);
-      doc.setLineDashPattern([2, 2], 0);
-      doc.setFillColor(253, 253, 253);
-      doc.rect(boxX, boxY, boxW, boxH, 'FD');
-      doc.setLineDashPattern([], 0);
-
-      const boxCenterX = boxX + (boxW / 2);
-      const boxCenterY = boxY + (boxH / 2);
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.5);
-      doc.setTextColor(156, 163, 175);
-      doc.text('PEGAR COMPROBANTE', boxCenterX, boxCenterY - 15, { align: 'center' });
-      doc.text('ORIGINAL AQUÍ', boxCenterX, boxCenterY - 9, { align: 'center' });
-
-      doc.setLineWidth(0.3);
-      doc.setDrawColor(209, 213, 219);
-      doc.setLineDashPattern([1, 1], 0);
-      doc.rect(boxCenterX - 16, boxCenterY + 4, 32, 22);
-      doc.setLineDashPattern([], 0);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(156, 163, 175);
-      doc.text('Original Físico', boxCenterX, boxCenterY + 16, { align: 'center' });
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(7);
-      doc.text('(Sujete firmemente con cinta o goma)', boxCenterX, boxCenterY + 40, { align: 'center' });
-      doc.text('Ancho máx: 70 mm', boxCenterX, boxCenterY + 45, { align: 'center' });
-
-      // Right digital attached image
-      const imgMaxW = 108;
-      const imgMaxH = 242;
-      const imgColX = 90;
-      const imgColY = 38;
-
-      if (photoSrc.startsWith('data:application/pdf')) {
-        doc.setFillColor(243, 244, 246);
-        doc.rect(imgColX, imgColY, imgMaxW, 100, 'F');
-        doc.setDrawColor(209, 213, 219);
-        doc.rect(imgColX, imgColY, imgMaxW, 100);
-
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(30, 58, 138);
-        doc.text("DOCUMENTO ADJUNTO EN PDF", imgColX + (imgMaxW / 2), imgColY + 30, { align: 'center' });
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.setTextColor(75, 85, 99);
-        doc.text(`Documento: ${c.type} N° ${c.documentNumber}`, imgColX + (imgMaxW / 2), imgColY + 45, { align: 'center' });
-        doc.text(`RUC: ${c.ruc}`, imgColX + (imgMaxW / 2), imgColY + 53, { align: 'center' });
-        doc.text(`Monto: S/ ${c.amount.toFixed(2)}`, imgColX + (imgMaxW / 2), imgColY + 61, { align: 'center' });
-      } else {
-        try {
-          const processed = await ensureCanvasDataUrl(photoSrc);
-          let finalW = imgMaxW;
-          let finalH = imgMaxH;
-          if (processed.width > 0 && processed.height > 0) {
-            const ratio = processed.width / processed.height;
-            const containerRatio = imgMaxW / imgMaxH;
-            if (ratio > containerRatio) {
-              finalW = imgMaxW;
-              finalH = imgMaxW / ratio;
-            } else {
-              finalH = imgMaxH;
-              finalW = imgMaxH * ratio;
-            }
-          }
-          const imgX = imgColX + (imgMaxW - finalW) / 2;
-          const imgY = imgColY + Math.min(8, Math.max(0, (imgMaxH - finalH) / 2));
-
-          doc.addImage(processed.dataUrl || photoSrc, processed.format, imgX, imgY, finalW, finalH, undefined, 'FAST');
-          doc.setDrawColor(209, 213, 219);
-          doc.setLineWidth(0.3);
-          doc.rect(imgX, imgY, finalW, finalH);
-        } catch (imgError) {
-          console.error("Could not render image in PDF", imgError);
-        }
-      }
+      currentY = 18;
     }
+
+    // Block Card Header Bar (Dark Navy Fill)
+    doc.setFillColor(30, 58, 138);
+    doc.rect(14, currentY, pageWidth - 28, 7, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text(`BLOQUE N° ${bIdx + 1}: ${r.name.toUpperCase()}`, 18, currentY + 5);
+    doc.text(`Colaborador: ${r.userName}`, pageWidth - 18, currentY + 5, { align: 'right' });
+
+    currentY += 7;
+
+    // Block Card Sub-Header Info Bar (Light Grey Fill)
+    doc.setFillColor(243, 244, 246);
+    doc.rect(14, currentY, pageWidth - 28, 6, 'F');
+    doc.setDrawColor(229, 231, 235);
+    doc.rect(14, currentY, pageWidth - 28, 6, 'S');
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(55, 65, 81);
+    doc.text(`Centro de Costo: ${r.costCenter || 'General'}  |  Estado: ${(r.status || 'Pendiente').toUpperCase()}  |  Adelanto: S/ ${(r.advanceAmount || 0).toFixed(2)}`, 18, currentY + 4.2);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Total Bloque: S/ ${totalBloque.toFixed(2)}`, pageWidth - 18, currentY + 4.2, { align: 'right' });
+
+    currentY += 6;
+
+    // Comprobantes Table for this Block
+    const tableColumn = ["Fecha", "Tipo Doc.", "N° Documento", "RUC / Razon Social", "Categoría", "Monto"];
+    const tableRows = r.comprobantes.map(c => [
+      formatLocalDate(c.date),
+      c.type,
+      c.documentNumber,
+      `${c.ruc}${c.razonSocial ? ' - ' + c.razonSocial : ''}`,
+      c.category || 'Otros',
+      `S/ ${c.amount.toFixed(2)}`
+    ]);
+
+    if (tableRows.length === 0) {
+      tableRows.push(["-", "Sin comprobantes registrados", "-", "-", "-", "S/ 0.00"]);
+    }
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: currentY,
+      margin: { left: 14, right: 14 },
+      theme: 'grid',
+      styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2, lineColor: [229, 231, 235] },
+      headStyles: { fillColor: [75, 85, 99], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
+      columnStyles: {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 26 },
+        2: { cellWidth: 28 },
+        3: { cellWidth: 58 },
+        4: { cellWidth: 26 },
+        5: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY || (currentY + 20);
+
+    // Block Subtotal Footer Bar
+    doc.setFillColor(249, 250, 251);
+    doc.setDrawColor(209, 213, 219);
+    doc.rect(14, currentY, pageWidth - 28, 6, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(31, 41, 55);
+    doc.text(`SUBTOTAL BLOQUE "${r.name}": S/ ${totalBloque.toFixed(2)}`, pageWidth - 18, currentY + 4.2, { align: 'right' });
+
+    const saldoBloque = Math.abs((r.advanceAmount || 0) - totalBloque);
+    const esDevolucionBloque = (r.advanceAmount || 0) >= totalBloque;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(75, 85, 99);
+    doc.text(`Saldo Bloque: S/ ${saldoBloque.toFixed(2)} (${esDevolucionBloque ? 'A devolver' : 'A reembolsar'})`, 18, currentY + 4.2);
+
+    currentY += 12; // Spacing before next block
   }
 
-  doc.save('Reporte_Consolidado_Rendiciones.pdf');
+  // Footer page numbers
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(156, 163, 175);
+    doc.text(`Página ${i} de ${totalPages} - Reporte Consolidado de Gastos`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+  }
+
+  doc.save(`Reporte_Resumen_Consolidado_Gastos.pdf`);
 };
 
 export const exportToExcel = (rendiciones: Rendicion[], settings: AppSettings) => {

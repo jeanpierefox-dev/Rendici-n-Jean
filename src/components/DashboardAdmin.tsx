@@ -509,7 +509,7 @@ export function DashboardAdmin() {
                               onClick={async () => {
                                 setGeneratingPdfId(rendicion.id);
                                 try {
-                                  await exportSingleRendicionPDF(rendicion, settings, true);
+                                  await exportSingleRendicionPDF(rendicion, settings, false);
                                 } catch (err) {
                                   console.error(err);
                                   alert('Error al generar el reporte PDF.');
@@ -519,17 +519,17 @@ export function DashboardAdmin() {
                               }}
                               disabled={generatingPdfId !== null}
                               className="inline-flex items-center px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer border border-blue-200/50 disabled:opacity-50"
-                              title="Descargar Reporte Completo de Liquidación de Gastos con Comprobantes"
+                              title="Descargar Informe de Liquidación de Gastos (Puro informe sin recibos)"
                             >
                               {generatingPdfId === rendicion.id ? (
                                 <>
                                   <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                                  Generando PDF...
+                                  Generando Informe...
                                 </>
                               ) : (
                                 <>
                                   <FileText className="w-4 h-4 text-blue-600" />
-                                  Descargar Reporte PDF
+                                  Descargar Informe PDF
                                 </>
                               )}
                             </button>
