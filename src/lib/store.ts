@@ -3,7 +3,39 @@ import { persist } from 'zustand/middleware';
 import { Rendicion, AppSettings, AppNotification, User, Comprobante } from '../types';
 import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { safeUUID } from './utils';
+import { safeUUID, recompressBase64Image } from './utils';
+
+const savePhotoToFirestoreDoc = async (photoVal: string, keys: string[]) => {
+  if (!photoVal) return;
+  let photoToSave = photoVal;
+  if (photoToSave.length > 850000 && photoToSave.startsWith('data:image/')) {
+    try {
+      photoToSave = await recompressBase64Image(photoToSave, 1000, 1300, 0.65);
+    } catch (e) {
+      console.warn("Could not recompress image:", e);
+    }
+  }
+
+  for (const rawKey of keys) {
+    if (!rawKey) continue;
+    const key = rawKey.trim().replace(/\//g, '_');
+    if (!key) continue;
+
+    try {
+      await setDoc(doc(db, 'receipt_photos', key), { photo: photoToSave });
+    } catch (err) {
+      console.error(`Failed to save receipt_photo under key ${key}:`, err);
+      if (photoToSave.startsWith('data:image/')) {
+        try {
+          const compressedMore = await recompressBase64Image(photoToSave, 800, 1000, 0.5);
+          await setDoc(doc(db, 'receipt_photos', key), { photo: compressedMore });
+        } catch (retryErr) {
+          console.error(`Retry saving ultra-compressed photo for key ${key} failed:`, retryErr);
+        }
+      }
+    }
+  }
+};
 
 // Initial Mock Data
 const MOCK_USERS: User[] = [
@@ -76,24 +108,13 @@ export const useAppStore = create<AppState>()(
           }
           if (compCopy.receiptPhoto) {
             const photoVal = compCopy.receiptPhoto;
-            const docId = compCopy.id.replace(/\//g, '_');
-            uploadPromises.push(
-              setDoc(doc(db, 'receipt_photos', docId), { photo: photoVal })
-                .catch(err => {
-                  console.error("Error saving receipt photo to Firestore:", err);
-                })
-            );
-            if (compCopy.documentNumber) {
-              const safeDocNum = compCopy.documentNumber.trim().replace(/\//g, '_');
-              if (safeDocNum !== docId) {
-                uploadPromises.push(
-                  setDoc(doc(db, 'receipt_photos', safeDocNum), { photo: photoVal })
-                    .catch(err => {
-                      console.error("Error saving receipt photo by docNumber:", err);
-                    })
-                );
-              }
-            }
+            const keysToSave = [
+              compCopy.id,
+              compCopy.documentNumber,
+              `${newId}_${compCopy.id}`
+            ].filter(Boolean) as string[];
+
+            uploadPromises.push(savePhotoToFirestoreDoc(photoVal, keysToSave));
             delete compCopy.receiptPhoto;
             compCopy.hasPhoto = true;
           } else if (c.receiptPhoto || c.hasPhoto) {
@@ -113,10 +134,10 @@ export const useAppStore = create<AppState>()(
         
         await setDoc(doc(db, 'rendiciones', newId), cleanRendicion);
         
-        // Optimistic / Local update - clear heavy base64 receiptPhoto in local state to avoid performance bottleneck
-        const localComprobantes = comprobantesToSave.map((c: any) => ({
-          ...c,
-          receiptPhoto: undefined,
+        // Optimistic / Local update - preserve local receiptPhoto if present so it is instantly available in UI and PDF exports
+        const localComprobantes = newRendicion.comprobantes.map((c: any, idx: number) => ({
+          ...comprobantesToSave[idx],
+          receiptPhoto: c.receiptPhoto || undefined,
           hasPhoto: c.hasPhoto || !!c.receiptPhoto
         }));
 
@@ -158,24 +179,13 @@ export const useAppStore = create<AppState>()(
             }
             if (compCopy.receiptPhoto) {
               const photoVal = compCopy.receiptPhoto;
-              const docId = compCopy.id.replace(/\//g, '_');
-              uploadPromises.push(
-                setDoc(doc(db, 'receipt_photos', docId), { photo: photoVal })
-                  .catch(err => {
-                    console.error("Error saving receipt photo to Firestore:", err);
-                  })
-              );
-              if (compCopy.documentNumber) {
-                const safeDocNum = compCopy.documentNumber.trim().replace(/\//g, '_');
-                if (safeDocNum !== docId) {
-                  uploadPromises.push(
-                    setDoc(doc(db, 'receipt_photos', safeDocNum), { photo: photoVal })
-                      .catch(err => {
-                        console.error("Error saving receipt photo by docNumber:", err);
-                      })
-                  );
-                }
-              }
+              const keysToSave = [
+                compCopy.id,
+                compCopy.documentNumber,
+                `${id}_${compCopy.id}`
+              ].filter(Boolean) as string[];
+
+              uploadPromises.push(savePhotoToFirestoreDoc(photoVal, keysToSave));
               delete compCopy.receiptPhoto;
               compCopy.hasPhoto = true;
             } else if (c.receiptPhoto || c.hasPhoto) {
@@ -197,14 +207,17 @@ export const useAppStore = create<AppState>()(
         await updateDoc(rendicionRef, cleanUpdateData);
 
         const updatedLocalComprobantes = updateData.comprobantes 
-          ? comprobantesToSave.map((c: any) => ({
-              ...c,
-              receiptPhoto: undefined,
-              hasPhoto: c.hasPhoto || !!c.receiptPhoto
-            }))
+          ? updateData.comprobantes.map((c: any, idx: number) => {
+              const savedComp = comprobantesToSave[idx];
+              return {
+                ...savedComp,
+                receiptPhoto: c.receiptPhoto || undefined,
+                hasPhoto: true
+              };
+            })
           : undefined;
 
-        // Optimistic / Local update - clear heavy base64 receiptPhoto in local state to avoid performance bottleneck
+        // Optimistic / Local update - preserve receiptPhoto in local state so it is instantly available in UI and PDF exports
         set((state) => ({
           rendiciones: state.rendiciones.map(r => r.id === id ? { 
             ...r, 

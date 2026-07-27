@@ -9,7 +9,7 @@ import {
   Coins, Landmark, AlertCircle, ArrowRight, Loader2, Paperclip,
   Eye, Download, X, Upload
 } from 'lucide-react';
-import { exportToPDF, exportSingleRendicionPDF, exportRendicionReceiptsPDF, formatPhotoDataUrl } from '../lib/export';
+import { exportToPDF, exportSingleRendicionPDF, exportRendicionReceiptsPDF, formatPhotoDataUrl, fetchPhotoForComprobante } from '../lib/export';
 import { Rendicion, Comprobante } from '../types';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -81,58 +81,29 @@ export function DashboardUser() {
     if (c.receiptPhoto) {
       const photo = formatPhotoDataUrl(c.receiptPhoto);
       setSelectedImage(photo);
-    } else {
-      const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
-      if (rawKeys.length === 0) {
-        alert('Este comprobante no posee identificador único para consultar el archivo adjunto.');
-        return;
-      }
-      const keysToTry: string[] = [];
-      for (const k of rawKeys) {
-        const trimmed = k.trim();
-        const sanitized = k.replace(/\//g, '_');
-        const trimmedSanitized = trimmed.replace(/\//g, '_');
-        
-        [sanitized, k, trimmed, trimmedSanitized].forEach(key => {
-          if (key && !keysToTry.includes(key)) {
-            keysToTry.push(key);
-          }
-        });
-      }
+      return;
+    }
 
-      setLoadingPhotoId(c.id || c.documentNumber);
-      try {
-        let photo: string | null = null;
-        for (const key of keysToTry) {
-          try {
-            const docSnap = await getDoc(doc(db, 'receipt_photos', key));
-            if (docSnap.exists() && docSnap.data()?.photo) {
-              photo = docSnap.data().photo;
-              break;
-            }
-          } catch (err) {
-            console.warn(`Could not fetch photo for key ${key}:`, err);
-          }
-        }
-
-        if (photo) {
-          const formattedPhoto = formatPhotoDataUrl(photo);
-          useAppStore.setState(state => ({
-            rendiciones: state.rendiciones.map(r => r.id === rendicionId ? {
-              ...r,
-              comprobantes: r.comprobantes.map(comp => (comp.id === c.id || comp.documentNumber === c.documentNumber) ? { ...comp, receiptPhoto: formattedPhoto, hasPhoto: true } : comp)
-            } : r)
-          }));
-          setSelectedImage(formattedPhoto);
-        } else {
-          alert('No se encontró el archivo adjunto en la base de datos o el bloque fue guardado sin imagen.');
-        }
-      } catch (err) {
-        console.error("Error fetching photo:", err);
-        alert('Error al descargar el archivo adjunto.');
-      } finally {
-        setLoadingPhotoId(null);
+    setLoadingPhotoId(c.id || c.documentNumber);
+    try {
+      const photo = await fetchPhotoForComprobante(c, rendicionId);
+      if (photo) {
+        const formattedPhoto = formatPhotoDataUrl(photo);
+        useAppStore.setState(state => ({
+          rendiciones: state.rendiciones.map(r => r.id === rendicionId ? {
+            ...r,
+            comprobantes: r.comprobantes.map(comp => (comp.id === c.id || comp.documentNumber === c.documentNumber) ? { ...comp, receiptPhoto: formattedPhoto, hasPhoto: true } : comp)
+          } : r)
+        }));
+        setSelectedImage(formattedPhoto);
+      } else {
+        alert('No se encontró el archivo adjunto en la base de datos o el bloque fue guardado sin imagen.');
       }
+    } catch (err) {
+      console.error("Error fetching photo:", err);
+      alert('Error al descargar el archivo adjunto.');
+    } finally {
+      setLoadingPhotoId(null);
     }
   };
 

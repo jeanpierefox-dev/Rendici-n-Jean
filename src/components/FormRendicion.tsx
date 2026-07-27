@@ -293,7 +293,7 @@ export function FormRendicion() {
 
     setLoadingPhotoId(targetKey);
     try {
-      const photo = await fetchPhotoForComprobante(c);
+      const photo = await fetchPhotoForComprobante(c, id);
       if (photo) {
         const formatted = formatPhotoDataUrl(photo);
         setComprobantes(prev => prev.map(item => {

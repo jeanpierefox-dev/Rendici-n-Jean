@@ -45,11 +45,17 @@ export const formatPhotoDataUrl = (rawPhoto: string): string => {
   return 'data:image/jpeg;base64,' + trimmed;
 };
 
-export const fetchPhotoForComprobante = async (c: any): Promise<string | undefined> => {
+export const fetchPhotoForComprobante = async (c: any, rendicionId?: string): Promise<string | undefined> => {
   if (c.receiptPhoto) {
     return formatPhotoDataUrl(c.receiptPhoto);
   }
-  const rawKeys = [c.id, c.documentNumber].filter(Boolean) as string[];
+  const rawKeys = [
+    c.id, 
+    c.documentNumber, 
+    rendicionId && c.id ? `${rendicionId}_${c.id}` : null,
+    rendicionId && c.documentNumber ? `${rendicionId}_${c.documentNumber}` : null
+  ].filter(Boolean) as string[];
+
   const keysToTry: string[] = [];
   for (const k of rawKeys) {
     const trimmed = k.trim();
@@ -84,7 +90,7 @@ export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSetting
   // Pre-load missing photos for all rendiciones
   const updatedRendiciones = await Promise.all(rendiciones.map(async (r) => {
     const updatedComprobantes = await Promise.all(r.comprobantes.map(async (c) => {
-      const photo = await fetchPhotoForComprobante(c);
+      const photo = await fetchPhotoForComprobante(c, r.id);
       return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
     }));
     return { ...r, comprobantes: updatedComprobantes };
@@ -387,7 +393,7 @@ const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; form
 export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = false) => {
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
   const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
-    const photo = await fetchPhotoForComprobante(c);
+    const photo = await fetchPhotoForComprobante(c, storeRendicion.id);
     return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
   }));
 
@@ -932,7 +938,7 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion | Ren
   // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
   const updatedRendiciones = await Promise.all(rendicionesList.map(async (r) => {
     const updatedComprobantes = await Promise.all(r.comprobantes.map(async (c) => {
-      const photo = await fetchPhotoForComprobante(c);
+      const photo = await fetchPhotoForComprobante(c, r.id);
       return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
     }));
     return { ...r, comprobantes: updatedComprobantes };
