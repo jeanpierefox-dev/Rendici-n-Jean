@@ -262,8 +262,8 @@ export function FormRendicion() {
         if (file.type === 'application/pdf') {
           base64 = await fileToBase64(file);
         } else {
-          // Compress image to 1200x1600 at 0.75 quality for high resolution and clear text legibility in PDF reports
-          base64 = await compressImageToBase64(file, 1200, 1600, 0.75);
+          // Compress image to 1000x1300 at 0.65 quality for fast processing and clear text legibility in PDF reports
+          base64 = await compressImageToBase64(file, 1000, 1300, 0.65);
         }
         base64 = formatPhotoDataUrl(base64);
         
@@ -337,7 +337,7 @@ export function FormRendicion() {
       if (file.type === 'application/pdf') {
         base64Photo = await fileToBase64(file);
       } else {
-        base64Photo = await compressImageToBase64(file, 1200, 1600, 0.75);
+        base64Photo = await compressImageToBase64(file, 1000, 1300, 0.65);
       }
       base64Photo = formatPhotoDataUrl(base64Photo);
 

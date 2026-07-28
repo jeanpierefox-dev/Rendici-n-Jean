@@ -8,19 +8,22 @@ import { safeUUID, recompressBase64Image } from './utils';
 const savePhotoToFirestoreDoc = async (photoVal: string, keys: string[]) => {
   if (!photoVal) return;
   let photoToSave = photoVal;
-  if (photoToSave.length > 850000 && photoToSave.startsWith('data:image/')) {
+  if (photoToSave.length > 1500000 && photoToSave.startsWith('data:image/')) {
     try {
-      photoToSave = await recompressBase64Image(photoToSave, 1000, 1300, 0.65);
+      photoToSave = await recompressBase64Image(photoToSave, 1000, 1200, 0.65);
     } catch (e) {
       console.warn("Could not recompress image:", e);
     }
   }
 
-  for (const rawKey of keys) {
-    if (!rawKey) continue;
-    const key = rawKey.trim().replace(/\//g, '_');
-    if (!key) continue;
+  const validKeys = Array.from(new Set(
+    keys
+      .filter(Boolean)
+      .map(k => k.trim().replace(/\//g, '_'))
+      .filter(Boolean)
+  ));
 
+  await Promise.all(validKeys.map(async (key) => {
     try {
       await setDoc(doc(db, 'receipt_photos', key), { photo: photoToSave });
     } catch (err) {
@@ -30,11 +33,11 @@ const savePhotoToFirestoreDoc = async (photoVal: string, keys: string[]) => {
           const compressedMore = await recompressBase64Image(photoToSave, 800, 1000, 0.5);
           await setDoc(doc(db, 'receipt_photos', key), { photo: compressedMore });
         } catch (retryErr) {
-          console.error(`Retry saving ultra-compressed photo for key ${key} failed:`, retryErr);
+          console.error(`Retry saving photo for key ${key} failed:`, retryErr);
         }
       }
     }
-  }
+  }));
 };
 
 // Initial Mock Data
@@ -82,75 +85,69 @@ export const useAppStore = create<AppState>()(
         const totalAmount = comprobantes.reduce((sum, c) => sum + c.amount, 0);
         const newId = safeUUID();
         
-        const newRendicion: any = {
+        const uploadPromises: Promise<void>[] = [];
+        const localComprobantes: any[] = [];
+        const comprobantesToSave: any[] = [];
+
+        for (const c of comprobantes) {
+          const compId = (c as any).id || safeUUID();
+          const compCopy = { ...c, id: compId };
+
+          if (compCopy.receiptPhoto) {
+            const photoVal = compCopy.receiptPhoto;
+            const keysToSave = [
+              compId,
+              compCopy.documentNumber,
+              `${newId}_${compId}`
+            ].filter(Boolean) as string[];
+
+            uploadPromises.push(savePhotoToFirestoreDoc(photoVal, keysToSave));
+
+            const cleanCopy = { ...compCopy, hasPhoto: true };
+            delete cleanCopy.receiptPhoto;
+            comprobantesToSave.push(cleanCopy);
+            localComprobantes.push({ ...compCopy, hasPhoto: true });
+          } else {
+            comprobantesToSave.push({ ...compCopy });
+            localComprobantes.push({ ...compCopy });
+          }
+        }
+
+        const localRendicion: any = {
           id: newId,
           name,
           status: 'Pendiente',
           createdAt: new Date().toISOString(),
           userId: currentUser.id,
           userName: currentUser.name,
-          comprobantes: comprobantes.map(c => ({ ...c, id: (c as any).id || safeUUID() })),
+          comprobantes: localComprobantes,
           totalAmount,
           advanceAmount,
           rendicionType: rendicionType || 'Logístico'
         };
 
-        if (advanceDate !== undefined) newRendicion.advanceDate = advanceDate;
-        if (signature !== undefined) newRendicion.signature = signature;
-        if (ingresos !== undefined) newRendicion.ingresos = ingresos;
-        
-        // Save photos to dedicated 'receipt_photos' collection in Firestore in parallel
-        const uploadPromises: Promise<void>[] = [];
-        const comprobantesToSave = newRendicion.comprobantes.map((c: any) => {
-          const compCopy = { ...c };
-          if (!compCopy.id) {
-            compCopy.id = safeUUID();
-          }
-          if (compCopy.receiptPhoto) {
-            const photoVal = compCopy.receiptPhoto;
-            const keysToSave = [
-              compCopy.id,
-              compCopy.documentNumber,
-              `${newId}_${compCopy.id}`
-            ].filter(Boolean) as string[];
+        if (advanceDate !== undefined) localRendicion.advanceDate = advanceDate;
+        if (signature !== undefined) localRendicion.signature = signature;
+        if (ingresos !== undefined) localRendicion.ingresos = ingresos;
 
-            uploadPromises.push(savePhotoToFirestoreDoc(photoVal, keysToSave));
-            delete compCopy.receiptPhoto;
-            compCopy.hasPhoto = true;
-          } else if (c.receiptPhoto || c.hasPhoto) {
-            compCopy.hasPhoto = true;
-          }
-          return compCopy;
-        });
-
-        if (uploadPromises.length > 0) {
-          await Promise.all(uploadPromises);
-        }
-
-        const cleanRendicion = JSON.parse(JSON.stringify({
-          ...newRendicion,
-          comprobantes: comprobantesToSave
-        }));
-        
-        await setDoc(doc(db, 'rendiciones', newId), cleanRendicion);
-        
-        // Optimistic / Local update - preserve local receiptPhoto if present so it is instantly available in UI and PDF exports
-        const localComprobantes = newRendicion.comprobantes.map((c: any, idx: number) => ({
-          ...comprobantesToSave[idx],
-          receiptPhoto: c.receiptPhoto || undefined,
-          hasPhoto: c.hasPhoto || !!c.receiptPhoto
-        }));
-
-        const localRendicion = {
-          ...newRendicion,
-          comprobantes: localComprobantes
-        };
-
+        // 1. Instantly update local store so UI is immediate
         set((state) => ({
           rendiciones: [localRendicion, ...state.rendiciones]
         }));
 
         get().addNotification('admin1', 'Nueva Rendición', `${currentUser.name} ha enviado el bloque "${name}" por S/ ${totalAmount.toFixed(2)}.`);
+
+        // 2. Perform Firestore operations in parallel
+        const cleanRendicion = JSON.parse(JSON.stringify({
+          ...localRendicion,
+          comprobantes: comprobantesToSave
+        }));
+
+        await Promise.all([
+          ...uploadPromises,
+          setDoc(doc(db, 'rendiciones', newId), cleanRendicion)
+        ]);
+
         return newId;
       },
 
@@ -168,56 +165,43 @@ export const useAppStore = create<AppState>()(
           updateData.totalAmount = updateData.comprobantes.reduce((sum: number, c: any) => sum + c.amount, 0);
         }
 
-        // Separate photos before saving to firestore in parallel
+        const uploadPromises: Promise<void>[] = [];
         let comprobantesToSave = undefined;
+        let updatedLocalComprobantes = undefined;
+
         if (updateData.comprobantes) {
-          const uploadPromises: Promise<void>[] = [];
-          comprobantesToSave = updateData.comprobantes.map((c: any) => {
-            const compCopy = { ...c };
-            if (!compCopy.id) {
-              compCopy.id = safeUUID();
-            }
+          const localComps: any[] = [];
+          const saveComps: any[] = [];
+
+          for (const c of updateData.comprobantes) {
+            const compId = (c as any).id || safeUUID();
+            const compCopy = { ...c, id: compId };
+
             if (compCopy.receiptPhoto) {
               const photoVal = compCopy.receiptPhoto;
               const keysToSave = [
-                compCopy.id,
+                compId,
                 compCopy.documentNumber,
-                `${id}_${compCopy.id}`
+                `${id}_${compId}`
               ].filter(Boolean) as string[];
 
               uploadPromises.push(savePhotoToFirestoreDoc(photoVal, keysToSave));
-              delete compCopy.receiptPhoto;
-              compCopy.hasPhoto = true;
-            } else if (c.receiptPhoto || c.hasPhoto) {
-              compCopy.hasPhoto = true;
+
+              const cleanCopy = { ...compCopy, hasPhoto: true };
+              delete cleanCopy.receiptPhoto;
+              saveComps.push(cleanCopy);
+              localComps.push({ ...compCopy, hasPhoto: true });
+            } else {
+              saveComps.push({ ...compCopy });
+              localComps.push({ ...compCopy });
             }
-            return compCopy;
-          });
-
-          if (uploadPromises.length > 0) {
-            await Promise.all(uploadPromises);
           }
+
+          updatedLocalComprobantes = localComps;
+          comprobantesToSave = saveComps;
         }
-        
-        const cleanUpdateData = JSON.parse(JSON.stringify({
-          ...updateData,
-          ...(comprobantesToSave !== undefined ? { comprobantes: comprobantesToSave } : {})
-        }));
 
-        await updateDoc(rendicionRef, cleanUpdateData);
-
-        const updatedLocalComprobantes = updateData.comprobantes 
-          ? updateData.comprobantes.map((c: any, idx: number) => {
-              const savedComp = comprobantesToSave[idx];
-              return {
-                ...savedComp,
-                receiptPhoto: c.receiptPhoto || undefined,
-                hasPhoto: true
-              };
-            })
-          : undefined;
-
-        // Optimistic / Local update - preserve receiptPhoto in local state so it is instantly available in UI and PDF exports
+        // 1. Instantly update local Zustand state so UI re-renders immediately!
         set((state) => ({
           rendiciones: state.rendiciones.map(r => r.id === id ? { 
             ...r, 
@@ -225,6 +209,17 @@ export const useAppStore = create<AppState>()(
             ...(updatedLocalComprobantes !== undefined ? { comprobantes: updatedLocalComprobantes } : {})
           } : r)
         }));
+
+        // 2. Perform Firestore operations in parallel
+        const cleanUpdateData = JSON.parse(JSON.stringify({
+          ...updateData,
+          ...(comprobantesToSave !== undefined ? { comprobantes: comprobantesToSave } : {})
+        }));
+
+        await Promise.all([
+          ...uploadPromises,
+          updateDoc(rendicionRef, cleanUpdateData)
+        ]);
       },
 
       updateRendicionStatus: async (id, newStatus) => {

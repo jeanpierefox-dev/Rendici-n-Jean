@@ -40,7 +40,7 @@ export function DashboardUser() {
       if (file.type === 'application/pdf') {
         base64Photo = await fileToBase64(file);
       } else {
-        base64Photo = await compressImageToBase64(file, 1200, 1600, 0.75);
+        base64Photo = await compressImageToBase64(file, 1000, 1300, 0.65);
       }
 
       base64Photo = formatPhotoDataUrl(base64Photo);
