@@ -732,14 +732,18 @@ export function FormRendicion() {
       if (isEditing && id) {
         await updateRendicion(id, payload);
       } else {
-        const newId = await addRendicion(payload.name, payload.advanceAmount, payload.comprobantes, payload.signature, payload.advanceDate, payload.ingresos, rendicionType);
-        if (previousBalance !== 0) {
-          await updateRendicion(newId, {
-            previousBalance,
-            previousBalanceSourceId,
-            previousBalanceSourceName
-          });
-        }
+        await addRendicion(
+          payload.name, 
+          payload.advanceAmount, 
+          payload.comprobantes, 
+          payload.signature, 
+          payload.advanceDate, 
+          payload.ingresos, 
+          rendicionType,
+          previousBalance,
+          previousBalanceSourceId,
+          previousBalanceSourceName
+        );
       }
       setLoading(false);
       setSuccess(true);

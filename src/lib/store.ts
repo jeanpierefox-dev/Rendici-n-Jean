@@ -5,8 +5,25 @@ import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { safeUUID, recompressBase64Image } from './utils';
 
+const savedPhotoFingerprints = new Set<string>();
+
 const savePhotoToFirestoreDoc = async (photoVal: string, keys: string[]) => {
   if (!photoVal) return;
+
+  const validKeys = Array.from(new Set(
+    keys
+      .filter(Boolean)
+      .map(k => k.trim().replace(/\//g, '_'))
+      .filter(Boolean)
+  ));
+
+  const keysToSave = validKeys.filter(key => {
+    const fingerprint = `${key}_${photoVal.length}`;
+    return !savedPhotoFingerprints.has(fingerprint);
+  });
+
+  if (keysToSave.length === 0) return;
+
   let photoToSave = photoVal;
   if (photoToSave.length > 1500000 && photoToSave.startsWith('data:image/')) {
     try {
@@ -16,22 +33,18 @@ const savePhotoToFirestoreDoc = async (photoVal: string, keys: string[]) => {
     }
   }
 
-  const validKeys = Array.from(new Set(
-    keys
-      .filter(Boolean)
-      .map(k => k.trim().replace(/\//g, '_'))
-      .filter(Boolean)
-  ));
-
-  await Promise.all(validKeys.map(async (key) => {
+  await Promise.all(keysToSave.map(async (key) => {
+    const fingerprint = `${key}_${photoVal.length}`;
     try {
       await setDoc(doc(db, 'receipt_photos', key), { photo: photoToSave });
+      savedPhotoFingerprints.add(fingerprint);
     } catch (err) {
       console.error(`Failed to save receipt_photo under key ${key}:`, err);
       if (photoToSave.startsWith('data:image/')) {
         try {
           const compressedMore = await recompressBase64Image(photoToSave, 800, 1000, 0.5);
           await setDoc(doc(db, 'receipt_photos', key), { photo: compressedMore });
+          savedPhotoFingerprints.add(fingerprint);
         } catch (retryErr) {
           console.error(`Retry saving photo for key ${key} failed:`, retryErr);
         }
@@ -58,7 +71,7 @@ interface AppState {
   currentUser: User;
   
   enterApp: () => void;
-  addRendicion: (name: string, advanceAmount: number, comprobantes: Omit<Comprobante, 'id'>[], signature?: string, advanceDate?: string, ingresos?: any[], rendicionType?: string) => Promise<string>;
+  addRendicion: (name: string, advanceAmount: number, comprobantes: Omit<Comprobante, 'id'>[], signature?: string, advanceDate?: string, ingresos?: any[], rendicionType?: string, previousBalance?: number, previousBalanceSourceId?: string, previousBalanceSourceName?: string) => Promise<string>;
   updateRendicion: (id: string, updates: Partial<Rendicion>) => Promise<void>;
   updateRendicionStatus: (id: string, newStatus: Rendicion['status']) => Promise<void>;
   deleteRendicion: (id: string) => Promise<void>;
@@ -80,7 +93,7 @@ export const useAppStore = create<AppState>()(
 
       enterApp: () => set({ hasEnteredApp: true }),
 
-      addRendicion: async (name, advanceAmount, comprobantes, signature, advanceDate, ingresos, rendicionType) => {
+      addRendicion: async (name, advanceAmount, comprobantes, signature, advanceDate, ingresos, rendicionType, previousBalance, previousBalanceSourceId, previousBalanceSourceName) => {
         const { currentUser } = get();
         const totalAmount = comprobantes.reduce((sum, c) => sum + c.amount, 0);
         const newId = safeUUID();
@@ -129,6 +142,9 @@ export const useAppStore = create<AppState>()(
         if (advanceDate !== undefined) localRendicion.advanceDate = advanceDate;
         if (signature !== undefined) localRendicion.signature = signature;
         if (ingresos !== undefined) localRendicion.ingresos = ingresos;
+        if (previousBalance !== undefined) localRendicion.previousBalance = previousBalance;
+        if (previousBalanceSourceId !== undefined) localRendicion.previousBalanceSourceId = previousBalanceSourceId;
+        if (previousBalanceSourceName !== undefined) localRendicion.previousBalanceSourceName = previousBalanceSourceName;
 
         // 1. Instantly update local store so UI is immediate
         set((state) => ({
@@ -137,16 +153,18 @@ export const useAppStore = create<AppState>()(
 
         get().addNotification('admin1', 'Nueva Rendición', `${currentUser.name} ha enviado el bloque "${name}" por S/ ${totalAmount.toFixed(2)}.`);
 
-        // 2. Perform Firestore operations in parallel
+        // 2. Perform Firestore save: main doc first for fast response
         const cleanRendicion = JSON.parse(JSON.stringify({
           ...localRendicion,
           comprobantes: comprobantesToSave
         }));
 
-        await Promise.all([
-          ...uploadPromises,
-          setDoc(doc(db, 'rendiciones', newId), cleanRendicion)
-        ]);
+        await setDoc(doc(db, 'rendiciones', newId), cleanRendicion);
+
+        // 3. Process photo uploads asynchronously in background without blocking form submission
+        if (uploadPromises.length > 0) {
+          Promise.all(uploadPromises).catch(err => console.error("Error in background photo uploads:", err));
+        }
 
         return newId;
       },
@@ -210,16 +228,18 @@ export const useAppStore = create<AppState>()(
           } : r)
         }));
 
-        // 2. Perform Firestore operations in parallel
+        // 2. Perform Firestore save: main doc first for fast response
         const cleanUpdateData = JSON.parse(JSON.stringify({
           ...updateData,
           ...(comprobantesToSave !== undefined ? { comprobantes: comprobantesToSave } : {})
         }));
 
-        await Promise.all([
-          ...uploadPromises,
-          updateDoc(rendicionRef, cleanUpdateData)
-        ]);
+        await updateDoc(rendicionRef, cleanUpdateData);
+
+        // 3. Process photo uploads asynchronously in background without blocking form submission
+        if (uploadPromises.length > 0) {
+          Promise.all(uploadPromises).catch(err => console.error("Error in background photo uploads:", err));
+        }
       },
 
       updateRendicionStatus: async (id, newStatus) => {
