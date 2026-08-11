@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router';
 import { fileToBase64, compressImageToBase64, formatLocalDate, safeUUID, recompressBase64Image } from '../lib/utils';
 import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2, Edit3, DollarSign, Calendar, Tag, Eye, Paperclip, Download, X, ArrowRightLeft } from 'lucide-react';
 import { Comprobante, DocType, Rendicion, Ingreso } from '../types';
+import { DigitalSignaturePad } from './DigitalSignaturePad';
 import { format } from 'date-fns';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -1512,47 +1513,15 @@ export function FormRendicion() {
       </div>
 
       {/* --- SIGNATURE SECTION --- */}
-      <div className="bg-white border border-gray-200 shadow-sm rounded-xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h4 className="font-bold text-gray-800 flex items-center text-sm">
-            <PenTool className="w-5 h-5 mr-2 text-gray-500" />
-            Firma del Empleado (Opcional)
-          </h4>
-          <p className="text-xs text-gray-500 mt-1">Sube una imagen de tu firma digital para formalizar esta rendición.</p>
-        </div>
-        <div className="flex-shrink-0 flex flex-col items-end">
-          <input 
-            type="file" 
-            id="signature-upload" 
-            accept="image/*" 
-            className="hidden" 
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                const base64 = await compressImageToBase64(file, 800, 800, 0.6); // Compress signature to be lightweight
-                const sizeInBytes = base64.length * 0.75;
-                if (sizeInBytes > 150 * 1024) {
-                  alert('La imagen de firma es muy pesada. Intente con otra de menor resolución.');
-                  return;
-                }
-                setSignature(base64);
-                if (isEditing && id) {
-                  await autoSaveBlock(comprobantes, ingresos, base64);
-                }
-              }
-            }} 
-          />
-          <label htmlFor="signature-upload" className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-semibold rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors">
-            <UploadCloud className="w-4 h-4 mr-2 text-gray-500" /> Subir Firma
-          </label>
-          {signature && (
-            <div className="mt-3">
-              <span className="text-xs text-green-600 font-bold mb-1 block text-right">Firma cargada</span>
-              <img src={signature} alt="Firma" className="h-12 w-auto object-contain border border-gray-200 rounded p-1 bg-white" />
-            </div>
-          )}
-        </div>
-      </div>
+      <DigitalSignaturePad
+        initialSignature={signature}
+        onSaveSignature={async (newSig) => {
+          setSignature(newSig);
+          if (isEditing && id) {
+            await autoSaveBlock(comprobantes, ingresos, newSig);
+          }
+        }}
+      />
       
       {/* --- FORM ACTIONS --- */}
       <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 w-full">

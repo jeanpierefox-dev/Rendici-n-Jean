@@ -45,39 +45,46 @@ export const formatPhotoDataUrl = (rawPhoto: string): string => {
   return 'data:image/jpeg;base64,' + trimmed;
 };
 
+const photoCache = new Map<string, string>();
+
 export const fetchPhotoForComprobante = async (c: any, rendicionId?: string): Promise<string | undefined> => {
   if (c.receiptPhoto) {
-    return formatPhotoDataUrl(c.receiptPhoto);
+    const formatted = formatPhotoDataUrl(c.receiptPhoto);
+    if (c.id) photoCache.set(c.id, formatted);
+    return formatted;
   }
-  const rawKeys = [
-    c.id, 
-    c.documentNumber, 
-    rendicionId && c.id ? `${rendicionId}_${c.id}` : null,
-    rendicionId && c.documentNumber ? `${rendicionId}_${c.documentNumber}` : null
-  ].filter(Boolean) as string[];
 
-  const keysToTry: string[] = [];
-  for (const k of rawKeys) {
-    const trimmed = k.trim();
-    const sanitized = k.replace(/\//g, '_');
-    const trimmedSanitized = trimmed.replace(/\//g, '_');
-    
-    [sanitized, k, trimmed, trimmedSanitized].forEach(key => {
-      if (key && !keysToTry.includes(key)) {
-        keysToTry.push(key);
-      }
-    });
+  const primaryKey = (c.id || c.documentNumber || '').trim().replace(/\//g, '_');
+  const scopedKey = rendicionId && (c.id || c.documentNumber) ? `${rendicionId}_${c.id || c.documentNumber}`.trim().replace(/\//g, '_') : '';
+
+  if (primaryKey && photoCache.has(primaryKey)) {
+    return photoCache.get(primaryKey);
   }
+  if (scopedKey && photoCache.has(scopedKey)) {
+    return photoCache.get(scopedKey);
+  }
+
+  const keysToTry = Array.from(new Set([scopedKey, primaryKey].filter(Boolean)));
+
   for (const key of keysToTry) {
     try {
       const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', key));
       if (photoDoc.exists() && photoDoc.data()?.photo) {
-        return formatPhotoDataUrl(photoDoc.data().photo);
+        const formatted = formatPhotoDataUrl(photoDoc.data().photo);
+        if (primaryKey) photoCache.set(primaryKey, formatted);
+        if (scopedKey) photoCache.set(scopedKey, formatted);
+        return formatted;
       }
-    } catch (err) {
-      console.error(`Could not fetch receipt photo for key ${key}:`, err);
+    } catch (err: any) {
+      console.warn(`Could not fetch receipt photo for key ${key}:`, err?.message || err);
+      // If Firestore quota is exhausted, log clearly and break loop to avoid sending more requests
+      if (err?.code === 'resource-exhausted' || String(err).includes('quota')) {
+        console.error("Firestore quota exceeded during receipt photo fetch.");
+        break;
+      }
     }
   }
+
   return undefined;
 };
 

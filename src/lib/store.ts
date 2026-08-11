@@ -38,15 +38,20 @@ const savePhotoToFirestoreDoc = async (photoVal: string, keys: string[]) => {
     try {
       await setDoc(doc(db, 'receipt_photos', key), { photo: photoToSave });
       savedPhotoFingerprints.add(fingerprint);
-    } catch (err) {
-      console.error(`Failed to save receipt_photo under key ${key}:`, err);
-      if (photoToSave.startsWith('data:image/')) {
-        try {
-          const compressedMore = await recompressBase64Image(photoToSave, 800, 1000, 0.5);
-          await setDoc(doc(db, 'receipt_photos', key), { photo: compressedMore });
-          savedPhotoFingerprints.add(fingerprint);
-        } catch (retryErr) {
-          console.error(`Retry saving photo for key ${key} failed:`, retryErr);
+    } catch (err: any) {
+      if (err?.code === 'resource-exhausted' || String(err).includes('quota')) {
+        console.warn(`Firestore write quota exceeded for key ${key}. Local photo preserved in session.`);
+        savedPhotoFingerprints.add(fingerprint);
+      } else {
+        console.error(`Failed to save receipt_photo under key ${key}:`, err);
+        if (photoToSave.startsWith('data:image/')) {
+          try {
+            const compressedMore = await recompressBase64Image(photoToSave, 800, 1000, 0.5);
+            await setDoc(doc(db, 'receipt_photos', key), { photo: compressedMore });
+            savedPhotoFingerprints.add(fingerprint);
+          } catch (retryErr) {
+            console.error(`Retry saving photo for key ${key} failed:`, retryErr);
+          }
         }
       }
     }
@@ -110,7 +115,6 @@ export const useAppStore = create<AppState>()(
             const photoVal = compCopy.receiptPhoto;
             const keysToSave = [
               compId,
-              compCopy.documentNumber,
               `${newId}_${compId}`
             ].filter(Boolean) as string[];
 
@@ -199,7 +203,6 @@ export const useAppStore = create<AppState>()(
               const photoVal = compCopy.receiptPhoto;
               const keysToSave = [
                 compId,
-                compCopy.documentNumber,
                 `${id}_${compId}`
               ].filter(Boolean) as string[];
 
