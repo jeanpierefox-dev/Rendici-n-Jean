@@ -34,7 +34,7 @@ export const getRendicionTotalFondos = (rendicion: Rendicion): {
 };
 
 /**
- * Generates a formal corporate text ticket for a single Rendicion block formatted with box borders for WhatsApp.
+ * Generates a formal corporate text ticket for a single Rendicion block formatted for WhatsApp.
  */
 export const generateSingleRendicionWhatsAppMessage = (
   rendicion: Rendicion,
@@ -49,61 +49,58 @@ export const generateSingleRendicionWhatsAppMessage = (
     ? format(parseISO(rendicion.createdAt), 'dd/MM/yyyy') 
     : format(new Date(), 'dd/MM/yyyy');
 
-  let balanceText = '';
+  let balanceHeadline = '';
   if (balance > 0) {
-    balanceText = `🔴 Saldo A FAVOR Trabajador: S/ ${balance.toFixed(2)}`;
+    balanceHeadline = `🔴 *LIQUIDACIÓN:* *S/ ${balance.toFixed(2)} A FAVOR DEL TRABAJADOR* (Reembolso)`;
   } else if (balance < 0) {
-    balanceText = `🟢 Saldo A DEVOLVER a Empresa: S/ ${Math.abs(balance).toFixed(2)}`;
+    balanceHeadline = `🟢 *LIQUIDACIÓN:* *S/ ${Math.abs(balance).toFixed(2)} A DEVOLVER A EMPRESA*`;
   } else {
-    balanceText = `🔵 Saldo Equilibrado: S/ 0.00`;
+    balanceHeadline = `🔵 *LIQUIDACIÓN:* *S/ 0.00 (Saldo Equilibrado)*`;
   }
 
   let statusEmoji = '⏳';
   if (rendicion.status === 'Aprobado') statusEmoji = '✅';
   if (rendicion.status === 'Rechazado') statusEmoji = '❌';
 
-  let msg = `┌──────────────────────────────────────────┐\n`;
-  msg += `│ 🎟️ TICKET CORPORATIVO DE VIÁTICOS        │\n`;
-  msg += `├──────────────────────────────────────────┤\n`;
-  msg += `│ 🏢 Empresa:     *${companyName.toUpperCase()}*\n`;
-  msg += `│ 📋 Bloque:      *${rendicion.name}*\n`;
-  msg += `│ 👤 Responsable: *${rendicion.userName}*\n`;
-  msg += `│ 🏷️ Tipo:        ${rendicion.rendicionType || 'Logístico'}\n`;
-  msg += `│ 📅 Fecha:       ${dateFormatted}\n`;
-  msg += `│ 📌 Estado:      ${statusEmoji} *${rendicion.status.toUpperCase()}*\n`;
-  msg += `├──────────────────────────────────────────┤\n`;
-  msg += `│ 💰 BALANZA DE FONDOS Y GASTOS            │\n`;
-  msg += `├──────────────────────────────────────────┤\n`;
-  msg += `│ • Desembolso Inicial:   S/ ${initialAdvance.toFixed(2)}\n`;
+  let msg = `🏢 *${companyName.toUpperCase()}* - *TICKET DE RENDICIÓN*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `📍 *Obra / Bloque:* ${rendicion.name}\n`;
+  msg += `👤 *Responsable:* ${rendicion.userName}\n`;
+  msg += `🏷️ *Tipo Rendición:* ${rendicion.rendicionType || 'Logístico'}\n`;
+  msg += `📅 *Fecha Registro:* ${dateFormatted}\n`;
+  msg += `📌 *Estado:* ${statusEmoji} *${rendicion.status.toUpperCase()}*\n\n`;
+
+  msg += `💰 *RESUMEN FINANCIERO*\n`;
+  msg += `──────────────────────────\n`;
+  msg += `▫️ Desembolso Inicial: *S/ ${initialAdvance.toFixed(2)}*\n`;
 
   if (previousBalance !== 0) {
-    msg += `│ • Saldo Arrastrado:     S/ ${previousBalance.toFixed(2)}\n`;
+    msg += `▫️ Saldo Arrastrado: *S/ ${previousBalance.toFixed(2)}*\n`;
   }
   if (additionalIngresos > 0) {
-    msg += `│ • Ingresos Adicionales: S/ ${additionalIngresos.toFixed(2)}\n`;
+    msg += `▫️ Ingresos Adicionales: *S/ ${additionalIngresos.toFixed(2)}*\n`;
   }
 
-  msg += `│ • TOTAL FONDOS:         S/ ${totalFondos.toFixed(2)}\n`;
-  msg += `│ • TOTAL GASTADO:        S/ ${totalGastado.toFixed(2)} (${rendicion.comprobantes?.length || 0} docs)\n`;
-  msg += `├──────────────────────────────────────────┤\n`;
-  msg += `│ ⚖️ RESULTADO DE LIQUIDACIÓN               │\n`;
-  msg += `│ ${balanceText}\n`;
+  msg += `🔹 *TOTAL FONDOS:* *S/ ${totalFondos.toFixed(2)}*\n`;
+  msg += `🔸 *TOTAL GASTADO:* *S/ ${totalGastado.toFixed(2)}* (${rendicion.comprobantes?.length || 0} docs)\n`;
+  msg += `──────────────────────────\n`;
+  msg += `${balanceHeadline}\n\n`;
 
   if (rendicion.comprobantes && rendicion.comprobantes.length > 0) {
-    msg += `├──────────────────────────────────────────┤\n`;
-    msg += `│ 📑 DETALLE DE COMPROBANTES (${rendicion.comprobantes.length})            │\n`;
-    msg += `├──────────────────────────────────────────┤\n`;
+    msg += `🧾 *DETALLE DE COMPROBANTES (${rendicion.comprobantes.length})*\n`;
+    msg += `──────────────────────────\n`;
     rendicion.comprobantes.forEach((c, idx) => {
-      const docType = c.type || 'Comprobante';
+      const docType = c.type || 'Doc';
       const docNum = c.documentNumber ? `N° ${c.documentNumber}` : '';
       const supplier = c.razonSocial ? `(${c.razonSocial})` : '';
-      msg += `│ ${idx + 1}. ${docType} ${docNum} ${supplier}\n`;
-      msg += `│    Monto: *S/ ${c.amount.toFixed(2)}* [${c.category || 'General'}]\n`;
+      msg += `${idx + 1}. *${docType} ${docNum}* ${supplier}\n`;
+      msg += `   💵 Monto: *S/ ${c.amount.toFixed(2)}* | 🏷️ _${c.category || 'General'}_\n`;
     });
+    msg += `\n`;
   }
 
-  msg += `└──────────────────────────────────────────┘\n`;
-  msg += `_Ticket oficial emitido por el sistema._`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `✅ _Ticket de gastos verificado y registrado digitalmente._`;
 
   return msg;
 };
@@ -131,51 +128,51 @@ export const generateGeneralSummaryWhatsAppMessage = (
 
   const netBalance = totalGastado - totalFondos;
 
-  let balanceText = '';
+  let balanceHeadline = '';
   if (netBalance > 0) {
-    balanceText = `🔴 Saldo Global Favor Trabajador: S/ ${netBalance.toFixed(2)}`;
+    balanceHeadline = `🔴 *RESULTADO GLOBAL:* *S/ ${netBalance.toFixed(2)} A FAVOR DEL TRABAJADOR*`;
   } else if (netBalance < 0) {
-    balanceText = `🟢 Saldo Global Favor Empresa: S/ ${Math.abs(netBalance).toFixed(2)}`;
+    balanceHeadline = `🟢 *RESULTADO GLOBAL:* *S/ ${Math.abs(netBalance).toFixed(2)} A DEVOLVER A EMPRESA*`;
   } else {
-    balanceText = `🔵 Saldo General Equilibrado: S/ 0.00`;
+    balanceHeadline = `🔵 *RESULTADO GLOBAL:* *S/ 0.00 (Cuentas Saldadas)*`;
   }
 
   const headerTitle = monthTitle 
     ? `RESUMEN MENSUAL: ${monthTitle.toUpperCase()}`
     : `RESUMEN GENERAL DE VIÁTICOS Y GASTOS`;
 
-  let msg = `┌──────────────────────────────────────────┐\n`;
-  msg += `│ 📊 ${headerTitle.padEnd(38, ' ')}│\n`;
-  msg += `├──────────────────────────────────────────┤\n`;
-  msg += `│ 🏢 Empresa: *${companyName.toUpperCase()}*\n`;
-  if (userName) msg += `│ 👤 Usuario: *${userName}*\n`;
-  if (monthTitle) msg += `│ 🗓️ Período: *${monthTitle}*\n`;
-  msg += `│ 📅 Fecha:   ${format(new Date(), 'dd/MM/yyyy hh:mm a')}\n`;
-  msg += `├──────────────────────────────────────────┤\n`;
-  msg += `│ 📈 BALANCE CONSOLIDADO (${rendiciones.length} Bloques / ${totalDocs} Docs)│\n`;
-  msg += `├──────────────────────────────────────────┤\n`;
-  msg += `│ • Total Fondos Entregados: S/ ${totalFondos.toFixed(2)}\n`;
-  msg += `│ • Total Gastos Sustentados:S/ ${totalGastado.toFixed(2)}\n`;
-  msg += `│ ${balanceText}\n`;
-  msg += `├──────────────────────────────────────────┤\n`;
-  msg += `│ 📋 DESGLOSE POR BLOQUE DE RENDICIÓN        │\n`;
-  msg += `├──────────────────────────────────────────┤\n`;
+  let msg = `📊 *${companyName.toUpperCase()}*\n`;
+  msg += `*${headerTitle}*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  if (userName) msg += `👤 *Usuario:* ${userName}\n`;
+  if (monthTitle) msg += `🗓️ *Período:* ${monthTitle}\n`;
+  msg += `📅 *Fecha Emisión:* ${format(new Date(), 'dd/MM/yyyy hh:mm a')}\n\n`;
+
+  msg += `📈 *CONSOLIDADO FINANCIERO* (${rendiciones.length} Bloques / ${totalDocs} Docs)\n`;
+  msg += `──────────────────────────\n`;
+  msg += `▫️ Total Fondos Recibidos: *S/ ${totalFondos.toFixed(2)}*\n`;
+  msg += `▫️ Total Gastos Sustentados: *S/ ${totalGastado.toFixed(2)}*\n`;
+  msg += `──────────────────────────\n`;
+  msg += `${balanceHeadline}\n\n`;
+
+  msg += `📋 *DESGLOSE DE BLOQUES DE RENDICIÓN*\n`;
+  msg += `──────────────────────────\n`;
 
   rendiciones.forEach((r, idx) => {
     const statusEmoji = r.status === 'Aprobado' ? '✅' : r.status === 'Rechazado' ? '❌' : '⏳';
     const { totalFondos: rFondos } = getRendicionTotalFondos(r);
     const rBalance = r.totalAmount - rFondos;
     let rBalStr = '';
-    if (rBalance > 0) rBalStr = `(+S/ ${rBalance.toFixed(2)} Fav Trab)`;
-    else if (rBalance < 0) rBalStr = `(-S/ ${Math.abs(rBalance).toFixed(2)} Fav Emp)`;
-    else rBalStr = `(S/ 0.00)`;
+    if (rBalance > 0) rBalStr = `(🔴 +S/ ${rBalance.toFixed(2)} Fav. Trab)`;
+    else if (rBalance < 0) rBalStr = `(🟢 -S/ ${Math.abs(rBalance).toFixed(2)} Dev. Emp)`;
+    else rBalStr = `(🔵 S/ 0.00)`;
 
-    msg += `│ ${idx + 1}. *${r.name}* [${statusEmoji} ${r.status}]\n`;
-    msg += `│    Gastado S/ ${r.totalAmount.toFixed(2)} de S/ ${rFondos.toFixed(2)} ${rBalStr}\n`;
+    msg += `${idx + 1}. *${r.name}* [${statusEmoji} ${r.status.toUpperCase()}]\n`;
+    msg += `   • Gastado: *S/ ${r.totalAmount.toFixed(2)}* de *S/ ${rFondos.toFixed(2)}* ${rBalStr}\n`;
   });
 
-  msg += `└──────────────────────────────────────────┘\n`;
-  msg += `_Reporte consolidado emitido por el sistema._`;
+  msg += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `✅ _Reporte oficial de liquidación generado por la plataforma._`;
 
   return msg;
 };

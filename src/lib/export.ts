@@ -1268,10 +1268,10 @@ export const exportTicketPDF = async (rendicion: Rendicion, settings: AppSetting
 
   const comprobantesCount = rendicion.comprobantes?.length || 0;
   
-  // Dynamic page height calculation for 80mm roll ticket
+  // Dynamic page height calculation for 80mm roll ticket with comfortable spacing
   const calculatedHeight = Math.max(
-    190, 
-    135 + (comprobantesCount * 9) + (rendicion.signature ? 45 : 30)
+    205, 
+    150 + (comprobantesCount * 10) + (rendicion.signature ? 50 : 35)
   );
 
   const doc = new jsPDF({
@@ -1294,146 +1294,149 @@ export const exportTicketPDF = async (rendicion: Rendicion, settings: AppSetting
   // Logo or Company Header
   if (settings.companyLogo) {
     try {
-      doc.addImage(settings.companyLogo, 'PNG', (pageWidth - 28) / 2, y, 28, 14);
-      y += 16;
+      doc.addImage(settings.companyLogo, 'PNG', (pageWidth - 30) / 2, y, 30, 15);
+      y += 17;
     } catch (e) {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
+      doc.setFontSize(12);
       doc.setTextColor(15, 23, 42);
       doc.text(companyName.toUpperCase(), pageWidth / 2, y + 4, { align: 'center' });
-      y += 8;
+      y += 9;
     }
   } else {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
+    doc.setFontSize(12);
     doc.setTextColor(15, 23, 42);
     doc.text(companyName.toUpperCase(), pageWidth / 2, y + 4, { align: 'center' });
-    y += 8;
+    y += 9;
   }
 
   // Document Title Header Banner
   doc.setFillColor(15, 23, 42); // Slate 900
-  doc.rect(margin, y, contentWidth, 10, 'F');
+  doc.rect(margin, y, contentWidth, 11, 'F');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
+  doc.setFontSize(9.5);
   doc.setTextColor(255, 255, 255);
-  doc.text('TICKET DE RENDICIÓN DE GASTOS', pageWidth / 2, y + 6.5, { align: 'center' });
+  doc.text('TICKET DE RENDICIÓN DE GASTOS', pageWidth / 2, y + 7.2, { align: 'center' });
 
-  y += 12;
+  y += 14;
 
   // Ref & Date
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`N° REF: TCK-${rendicion.id.slice(0, 8).toUpperCase()}`, pageWidth / 2, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text(`N° REF: TCK-${rendicion.id.slice(0, 8).toUpperCase()}`, pageWidth / 2, y, { align: 'center' });
-  doc.text(`Emisión: ${fechaEmision}`, pageWidth / 2, y + 3.5, { align: 'center' });
+  doc.text(`Emisión: ${fechaEmision}`, pageWidth / 2, y + 4, { align: 'center' });
 
-  y += 6;
+  y += 7;
 
   // Separator Line
   doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.3);
   doc.line(margin, y, pageWidth - margin, y);
 
-  y += 4;
+  y += 5;
 
   // METADATA BLOCK
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(8.5);
   doc.setTextColor(15, 23, 42);
   doc.text('DATOS DE LA RENDICIÓN', margin, y);
 
-  y += 3.5;
+  y += 4;
   doc.setFillColor(248, 250, 252);
-  doc.rect(margin, y, contentWidth, 24, 'FD');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  doc.setTextColor(100, 116, 139);
-  
-  doc.text('RESPONSABLE:', margin + 2, y + 4.5);
-  doc.text('BLOQUE/OBRA:', margin + 2, y + 9.5);
-  doc.text('TIPO:', margin + 2, y + 14.5);
-  doc.text('REGISTRO:', margin + 2, y + 19.5);
+  doc.rect(margin, y, contentWidth, 26, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
-  doc.setTextColor(15, 23, 42);
+  doc.setTextColor(100, 116, 139);
+  
+  doc.text('RESPONSABLE:', margin + 2.5, y + 5);
+  doc.text('BLOQUE/OBRA:', margin + 2.5, y + 10.5);
+  doc.text('TIPO:', margin + 2.5, y + 16);
+  doc.text('REGISTRO:', margin + 2.5, y + 21.5);
 
-  // Truncate long strings for 80mm
-  const truncUser = rendicion.userName.length > 22 ? rendicion.userName.slice(0, 20) + '..' : rendicion.userName;
-  const truncBlock = rendicion.name.length > 22 ? rendicion.name.slice(0, 20) + '..' : rendicion.name;
-
-  doc.text(truncUser.toUpperCase(), margin + 22, y + 4.5);
-  doc.text(truncBlock, margin + 22, y + 9.5);
-  doc.text(rendicion.rendicionType || 'Logístico', margin + 22, y + 14.5);
-  doc.text(fechaRendicion, margin + 22, y + 19.5);
-
-  // Status Badge
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
-  if (rendicion.status === 'Aprobado') {
-    doc.setTextColor(16, 185, 129);
-    doc.text('✅ APROBADO', pageWidth - margin - 2, y + 19.5, { align: 'right' });
-  } else if (rendicion.status === 'Rechazado') {
-    doc.setTextColor(239, 68, 68);
-    doc.text('❌ RECHAZADO', pageWidth - margin - 2, y + 19.5, { align: 'right' });
-  } else {
-    doc.setTextColor(217, 119, 6);
-    doc.text('⏳ PENDIENTE', pageWidth - margin - 2, y + 19.5, { align: 'right' });
-  }
-
-  y += 27;
-
-  // FINANCIAL SUMMARY BOXES (80mm Vertical Stack)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(15, 23, 42);
+
+  // Truncate long strings safely for 80mm
+  const truncUser = rendicion.userName.length > 21 ? rendicion.userName.slice(0, 19) + '..' : rendicion.userName;
+  const truncBlock = rendicion.name.length > 21 ? rendicion.name.slice(0, 19) + '..' : rendicion.name;
+
+  doc.text(truncUser.toUpperCase(), margin + 24, y + 5);
+  doc.text(truncBlock, margin + 24, y + 10.5);
+  doc.text(rendicion.rendicionType || 'Logístico', margin + 24, y + 16);
+  doc.text(fechaRendicion, margin + 24, y + 21.5);
+
+  // Status Badge
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  if (rendicion.status === 'Aprobado') {
+    doc.setTextColor(16, 185, 129);
+    doc.text('✅ APROBADO', pageWidth - margin - 2, y + 21.5, { align: 'right' });
+  } else if (rendicion.status === 'Rechazado') {
+    doc.setTextColor(239, 68, 68);
+    doc.text('❌ RECHAZADO', pageWidth - margin - 2, y + 21.5, { align: 'right' });
+  } else {
+    doc.setTextColor(217, 119, 6);
+    doc.text('⏳ PENDIENTE', pageWidth - margin - 2, y + 21.5, { align: 'right' });
+  }
+
+  y += 29;
+
+  // FINANCIAL SUMMARY BOXES (80mm Vertical Stack)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
   doc.text('BALANCE Y RESUMEN FINANCIERO', margin, y);
 
-  y += 3;
+  y += 4;
 
   // Box 1: Total Fondos
   doc.setFillColor(241, 245, 249);
   doc.setDrawColor(203, 213, 225);
-  doc.rect(margin, y, contentWidth, 11, 'FD');
+  doc.rect(margin, y, contentWidth, 13, 'FD');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
+  doc.setFontSize(7);
   doc.setTextColor(71, 85, 105);
-  doc.text('1. TOTAL FONDOS RECIBIDOS', margin + 2, y + 4);
+  doc.text('1. TOTAL FONDOS RECIBIDOS', margin + 2.5, y + 4.5);
 
-  doc.setFontSize(9);
+  doc.setFontSize(10.5);
   doc.setTextColor(15, 23, 42);
-  doc.text(`S/ ${totalFondos.toFixed(2)}`, pageWidth - margin - 2, y + 5.5, { align: 'right' });
+  doc.text(`S/ ${totalFondos.toFixed(2)}`, pageWidth - margin - 2.5, y + 6.5, { align: 'right' });
 
-  doc.setFontSize(5.5);
+  doc.setFontSize(6.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139);
-  doc.text(`Inicial: S/ ${initialAdvance.toFixed(2)}${previousBalance !== 0 ? ` | Ant: S/ ${previousBalance.toFixed(2)}` : ''}`, margin + 2, y + 8.5);
+  doc.text(`Inicial: S/ ${initialAdvance.toFixed(2)}${previousBalance !== 0 ? ` | Ant: S/ ${previousBalance.toFixed(2)}` : ''}`, margin + 2.5, y + 10);
 
-  y += 12.5;
+  y += 14.5;
 
   // Box 2: Total Gastado
   doc.setFillColor(254, 243, 199);
   doc.setDrawColor(252, 211, 77);
-  doc.rect(margin, y, contentWidth, 11, 'FD');
+  doc.rect(margin, y, contentWidth, 13, 'FD');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
+  doc.setFontSize(7);
   doc.setTextColor(146, 64, 14);
-  doc.text('2. GASTOS SUSTENTADOS', margin + 2, y + 4);
+  doc.text('2. GASTOS SUSTENTADOS', margin + 2.5, y + 4.5);
 
-  doc.setFontSize(9);
+  doc.setFontSize(10.5);
   doc.setTextColor(120, 53, 15);
-  doc.text(`S/ ${totalGastado.toFixed(2)}`, pageWidth - margin - 2, y + 5.5, { align: 'right' });
+  doc.text(`S/ ${totalGastado.toFixed(2)}`, pageWidth - margin - 2.5, y + 6.5, { align: 'right' });
 
-  doc.setFontSize(5.5);
+  doc.setFontSize(6.5);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${comprobantesCount} comprobantes sustenta(s)`, margin + 2, y + 8.5);
+  doc.text(`${comprobantesCount} comprobantes reportados`, margin + 2.5, y + 10);
 
-  y += 12.5;
+  y += 14.5;
 
   // Box 3: Liquidación Resultante
   let box3Bg = [239, 246, 255];
@@ -1455,34 +1458,34 @@ export const exportTicketPDF = async (rendicion: Rendicion, settings: AppSetting
 
   doc.setFillColor(box3Bg[0], box3Bg[1], box3Bg[2]);
   doc.setDrawColor(box3Border[0], box3Border[1], box3Border[2]);
-  doc.rect(margin, y, contentWidth, 12, 'FD');
+  doc.rect(margin, y, contentWidth, 14, 'FD');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
+  doc.setFontSize(7);
   doc.setTextColor(box3Text[0], box3Text[1], box3Text[2]);
-  doc.text('3. RESULTADO LIQUIDACIÓN', margin + 2, y + 4);
+  doc.text('3. RESULTADO LIQUIDACIÓN', margin + 2.5, y + 4.5);
 
-  doc.setFontSize(9.5);
-  doc.text(`S/ ${Math.abs(balance).toFixed(2)}`, pageWidth - margin - 2, y + 6, { align: 'right' });
+  doc.setFontSize(11);
+  doc.text(`S/ ${Math.abs(balance).toFixed(2)}`, pageWidth - margin - 2.5, y + 7, { align: 'right' });
 
-  doc.setFontSize(6);
-  doc.text(resultLabel, margin + 2, y + 9);
+  doc.setFontSize(6.5);
+  doc.text(resultLabel, margin + 2.5, y + 10.5);
 
-  y += 15;
+  y += 17;
 
   // COMPROBANTES TABLE
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(8.5);
   doc.setTextColor(15, 23, 42);
   doc.text(`DETALLE COMPROBANTES (${comprobantesCount})`, margin, y);
 
   const tableHead = [['Doc / N°', 'Proveedor', 'Monto']];
   const tableBody = (rendicion.comprobantes || []).map((c) => {
     const docLabel = `${c.type || 'Doc'} ${c.documentNumber || ''}`.trim();
-    const truncDoc = docLabel.length > 14 ? docLabel.slice(0, 13) + '..' : docLabel;
+    const truncDoc = docLabel.length > 13 ? docLabel.slice(0, 12) + '..' : docLabel;
     
     const provName = c.razonSocial || c.ruc || '-';
-    const truncProv = provName.length > 16 ? provName.slice(0, 15) + '..' : provName;
+    const truncProv = provName.length > 15 ? provName.slice(0, 14) + '..' : provName;
 
     return [
       truncDoc,
@@ -1494,84 +1497,84 @@ export const exportTicketPDF = async (rendicion: Rendicion, settings: AppSetting
   autoTable(doc, {
     head: tableHead,
     body: tableBody,
-    startY: y + 2,
+    startY: y + 2.5,
     margin: { left: margin, right: margin },
     tableWidth: contentWidth,
     theme: 'grid',
-    styles: { font: 'helvetica', fontSize: 6, cellPadding: 1 },
-    headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', halign: 'left' },
+    styles: { font: 'helvetica', fontSize: 6.8, cellPadding: 1.5 },
+    headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', halign: 'left', fontSize: 7 },
     columnStyles: {
       0: { cellWidth: 26 },
-      1: { cellWidth: 28 },
-      2: { cellWidth: 18, halign: 'right', fontStyle: 'bold' }
+      1: { cellWidth: 27 },
+      2: { cellWidth: 19, halign: 'right', fontStyle: 'bold' }
     }
   });
 
-  y = (doc as any).lastAutoTable.finalY + 6;
+  y = (doc as any).lastAutoTable.finalY + 7;
 
   // SIGNATURES SECTION (Stacked for 80mm)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
+  doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
   doc.text('CONFORMIDAD Y FIRMAS', margin, y);
 
-  y += 3;
+  y += 3.5;
 
   // Colaborador Signature Box
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(203, 213, 225);
   
-  const sigBoxH = rendicion.signature ? 26 : 18;
+  const sigBoxH = rendicion.signature ? 28 : 20;
   doc.rect(margin, y, contentWidth, sigBoxH);
 
   if (rendicion.signature) {
     try {
-      doc.addImage(rendicion.signature, 'PNG', (pageWidth - 32) / 2, y + 1, 32, 14);
+      doc.addImage(rendicion.signature, 'PNG', (pageWidth - 34) / 2, y + 1, 34, 15);
     } catch (e) {
       console.warn("Could not render signature in Ticket 80mm", e);
     }
   }
 
-  const sigLineY = y + (rendicion.signature ? 17 : 11);
+  const sigLineY = y + (rendicion.signature ? 18.5 : 12.5);
   doc.setDrawColor(148, 163, 184);
-  doc.line(margin + 10, sigLineY, pageWidth - margin - 10, sigLineY);
+  doc.line(margin + 8, sigLineY, pageWidth - margin - 8, sigLineY);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
+  doc.setFontSize(7.5);
   doc.setTextColor(15, 23, 42);
-  doc.text('FIRMA DEL COLABORADOR', pageWidth / 2, sigLineY + 3.5, { align: 'center' });
+  doc.text('FIRMA DEL COLABORADOR', pageWidth / 2, sigLineY + 3.8, { align: 'center' });
   
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6);
+  doc.setFontSize(6.8);
   doc.setTextColor(100, 116, 139);
-  doc.text(truncUser, pageWidth / 2, sigLineY + 6.5, { align: 'center' });
+  doc.text(truncUser, pageWidth / 2, sigLineY + 7.2, { align: 'center' });
 
-  y += sigBoxH + 4;
+  y += sigBoxH + 4.5;
 
   // Admin Signature Box
-  doc.rect(margin, y, contentWidth, 18);
-  const adminLineY = y + 11;
-  doc.line(margin + 10, adminLineY, pageWidth - margin - 10, adminLineY);
+  doc.rect(margin, y, contentWidth, 20);
+  const adminLineY = y + 12.5;
+  doc.line(margin + 8, adminLineY, pageWidth - margin - 8, adminLineY);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.5);
+  doc.setFontSize(7.5);
   doc.setTextColor(15, 23, 42);
-  doc.text('V°B° CONTABILIDAD / ADMINISTRACIÓN', pageWidth / 2, adminLineY + 3.5, { align: 'center' });
+  doc.text('V°B° CONTABILIDAD / ADMINISTRACIÓN', pageWidth / 2, adminLineY + 3.8, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6);
+  doc.setFontSize(6.8);
   doc.setTextColor(100, 116, 139);
-  const truncCompany = companyName.length > 28 ? companyName.slice(0, 26) + '..' : companyName;
-  doc.text(`Aprobado: ${truncCompany}`, pageWidth / 2, adminLineY + 6.5, { align: 'center' });
+  const truncCompany = companyName.length > 26 ? companyName.slice(0, 24) + '..' : companyName;
+  doc.text(`Aprobado: ${truncCompany}`, pageWidth / 2, adminLineY + 7.2, { align: 'center' });
 
-  y += 22;
+  y += 25;
 
   // TICKET FOOTER
   doc.setFont('helvetica', 'italic');
-  doc.setFontSize(6);
+  doc.setFontSize(6.5);
   doc.setTextColor(148, 163, 184);
   doc.text('*** TICKET DE RENDICIÓN OFICIAL ***', pageWidth / 2, y, { align: 'center' });
-  doc.text(`${companyName} - Verificado`, pageWidth / 2, y + 3, { align: 'center' });
+  doc.text(`${companyName} - Verificado Digitalmente`, pageWidth / 2, y + 3.5, { align: 'center' });
 
   const sanitizedName = rendicion.name.replace(/[^a-zA-Z0-9]/g, '_');
   doc.save(`Ticket_80mm_${sanitizedName}_${rendicion.userName.replace(/\s+/g, '_')}.pdf`);
