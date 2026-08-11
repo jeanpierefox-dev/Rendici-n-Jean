@@ -347,10 +347,10 @@ export const ModalShareWhatsApp: React.FC<ModalShareWhatsAppProps> = ({
                 type="button"
                 onClick={() => exportTicketPDF(rendicionObj, settings)}
                 className="inline-flex items-center justify-center px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-sm gap-2 cursor-pointer"
-                title="Descargar ticket corporativo en formato PDF con firmas y cajas de balance"
+                title="Descargar ticket corporativo en formato Ticket 80mm PDF con firmas y cajas de balance"
               >
                 <Download className="w-4 h-4 text-emerald-400" />
-                Descargar Ticket PDF
+                Descargar Ticket 80mm PDF
               </button>
             )}
           </div>
