@@ -7,7 +7,8 @@ import {
   FolderOpen, PlusCircle, Clock, CheckCircle2, XCircle, 
   FileText, ChevronDown, ChevronUp, Calendar, Pencil, 
   Coins, Landmark, AlertCircle, ArrowRight, Loader2, Paperclip,
-  Eye, Download, X, Upload, ShieldCheck, DollarSign, ArrowRightLeft
+  Eye, Download, X, Upload, ShieldCheck, DollarSign, ArrowRightLeft,
+  MessageSquare
 } from 'lucide-react';
 import { exportToPDF, exportSingleRendicionPDF, exportRendicionReceiptsPDF, formatPhotoDataUrl, fetchPhotoForComprobante } from '../lib/export';
 import { Rendicion, Comprobante } from '../types';
@@ -15,6 +16,8 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { formatLocalDate, fileToBase64, compressImageToBase64 } from '../lib/utils';
 import { ModalLiquidacion } from './ModalLiquidacion';
+import { ModalShareWhatsApp } from './ModalShareWhatsApp';
+import { generateSingleRendicionWhatsAppMessage, generateGeneralSummaryWhatsAppMessage } from '../lib/whatsapp';
 
 export function DashboardUser() {
   const { rendiciones, currentUser, settings } = useAppStore();
@@ -24,6 +27,7 @@ export function DashboardUser() {
   const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null);
   const [uploadingCompId, setUploadingCompId] = useState<string | null>(null);
   const [liquidatingRendicion, setLiquidatingRendicion] = useState<Rendicion | null>(null);
+  const [shareWhatsAppModal, setShareWhatsAppModal] = useState<{ title: string; text: string } | null>(null);
 
   const handleDirectUploadAttachment = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -153,6 +157,24 @@ export function DashboardUser() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5 w-full sm:w-auto">
+          <button 
+            onClick={() => {
+              if (myRendiciones.length === 0) {
+                alert("No tienes rendiciones registradas para compartir.");
+                return;
+              }
+              const msg = generateGeneralSummaryWhatsAppMessage(myRendiciones, settings, currentUser.name);
+              setShareWhatsAppModal({
+                title: "Resumen General para WhatsApp",
+                text: msg
+              });
+            }}
+            className="flex-1 sm:flex-none text-center px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-xs inline-flex items-center justify-center gap-1.5"
+            title="Compartir Resumen Corporativo de Gastos vía WhatsApp"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            Compartir por WhatsApp
+          </button>
           <button 
             onClick={async () => {
               try {
@@ -381,6 +403,22 @@ export function DashboardUser() {
                           </div>
 
                           <div className="space-y-2.5">
+                            {/* WhatsApp Share Single Rendicion Button */}
+                            <button
+                              onClick={() => {
+                                const msg = generateSingleRendicionWhatsAppMessage(rendicion, settings);
+                                setShareWhatsAppModal({
+                                  title: `Compartir ${rendicion.name}`,
+                                  text: msg
+                                });
+                              }}
+                              className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2"
+                              title="Generar y compartir resumen formal de este bloque en WhatsApp"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                              Compartir por WhatsApp
+                            </button>
+
                             {/* Download Main PDF Button */}
                             <button
                               onClick={async () => {
@@ -560,6 +598,15 @@ export function DashboardUser() {
         <ModalLiquidacion
           rendicion={liquidatingRendicion}
           onClose={() => setLiquidatingRendicion(null)}
+        />
+      )}
+
+      {/* Share WhatsApp Modal */}
+      {shareWhatsAppModal && (
+        <ModalShareWhatsApp
+          title={shareWhatsAppModal.title}
+          initialMessage={shareWhatsAppModal.text}
+          onClose={() => setShareWhatsAppModal(null)}
         />
       )}
 

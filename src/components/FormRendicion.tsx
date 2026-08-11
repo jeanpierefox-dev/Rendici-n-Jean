@@ -2,19 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../lib/store';
 import { useNavigate, useParams } from 'react-router';
 import { fileToBase64, compressImageToBase64, formatLocalDate, safeUUID, recompressBase64Image } from '../lib/utils';
-import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2, Edit3, DollarSign, Calendar, Tag, Eye, Paperclip, Download, X, ArrowRightLeft } from 'lucide-react';
+import { UploadCloud, CheckCircle, Plus, Trash2, FileText, PenTool, Cloud, Loader2, Edit3, DollarSign, Calendar, Tag, Eye, Paperclip, Download, X, ArrowRightLeft, MessageSquare } from 'lucide-react';
 import { Comprobante, DocType, Rendicion, Ingreso } from '../types';
 import { DigitalSignaturePad } from './DigitalSignaturePad';
 import { format } from 'date-fns';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { fetchPhotoForComprobante, formatPhotoDataUrl } from '../lib/export';
+import { ModalShareWhatsApp } from './ModalShareWhatsApp';
+import { generateSingleRendicionWhatsAppMessage } from '../lib/whatsapp';
 
 export function FormRendicion() {
   const { id } = useParams<{ id: string }>();
   const isEditing = Boolean(id);
   
-  const { addRendicion, updateRendicion, rendiciones } = useAppStore();
+  const { addRendicion, updateRendicion, rendiciones, currentUser, settings } = useAppStore();
   const navigate = useNavigate();
 
   // Primary Rendicion fields
@@ -26,6 +28,7 @@ export function FormRendicion() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [shareWhatsAppModal, setShareWhatsAppModal] = useState<{ title: string; text: string } | null>(null);
 
   // Comprobante Form state
   const [editingComprobanteId, setEditingComprobanteId] = useState<string | null>(null);
@@ -804,7 +807,38 @@ export function FormRendicion() {
           <p className="text-sm text-gray-500 mt-1">Sube tus comprobantes de gastos y registra múltiples desembolsos recibidos.</p>
         </div>
         
-        <div className="flex items-center space-x-2 text-xs font-medium">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+          <button
+            type="button"
+            onClick={() => {
+              const currentRendicionObj: Rendicion = {
+                id: id || 'temp',
+                userId: currentUser?.id || 'user1',
+                name: name || 'Rendición en borrador',
+                rendicionType: rendicionType || 'Logístico',
+                userName: currentUser?.name || 'Colaborador',
+                advanceAmount: comprobantes.reduce((sum, c) => sum + (c.amount || 0), 0) > 0 ? (ingresos.reduce((sum, i) => sum + (i.amount || 0), 0) + previousBalance) : 0,
+                advanceDate: format(new Date(), 'yyyy-MM-dd'),
+                totalAmount: comprobantes.reduce((sum, c) => sum + (c.amount || 0), 0),
+                comprobantes: comprobantes,
+                ingresos: ingresos,
+                previousBalance: previousBalance,
+                status: 'Pendiente',
+                createdAt: new Date().toISOString()
+              };
+              const msg = generateSingleRendicionWhatsAppMessage(currentRendicionObj, settings);
+              setShareWhatsAppModal({
+                title: `Compartir Resumen por WhatsApp`,
+                text: msg
+              });
+            }}
+            className="inline-flex items-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors cursor-pointer shadow-xs gap-1.5"
+            title="Generar resumen formal para compartir por WhatsApp"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            Compartir por WhatsApp
+          </button>
+
           {saveStatus === 'saving' && (
             <span className="inline-flex items-center text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-full border border-amber-200 animate-pulse">
               <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5 text-amber-500" />
@@ -1593,6 +1627,14 @@ export function FormRendicion() {
             </div>
           </div>
         </div>
+      )}
+      {/* Modal de Compartir por WhatsApp */}
+      {shareWhatsAppModal && (
+        <ModalShareWhatsApp
+          title={shareWhatsAppModal.title}
+          initialMessage={shareWhatsAppModal.text}
+          onClose={() => setShareWhatsAppModal(null)}
+        />
       )}
     </div>
   );
