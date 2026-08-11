@@ -22,6 +22,67 @@ export function DashboardAdmin() {
   const [generatingPdfKey, setGeneratingPdfKey] = useState<string | null>(null);
   const [liquidatingRendicion, setLiquidatingRendicion] = useState<Rendicion | null>(null);
   const [shareWhatsAppModal, setShareWhatsAppModal] = useState<{ title: string; text: string; rendicionObj?: Rendicion } | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const [selectedUserFilter, setSelectedUserFilter] = useState<string>('all');
+
+  // Available months for selector
+  const availableMonths = useMemo(() => {
+    const monthMap = new Map<string, string>();
+    rendiciones.forEach(r => {
+      if (r.createdAt) {
+        try {
+          const d = parseISO(r.createdAt);
+          const key = format(d, 'yyyy-MM');
+          const label = format(d, 'MMMM yyyy', { locale: es });
+          const cap = label.charAt(0).toUpperCase() + label.slice(1);
+          if (!monthMap.has(key)) {
+            monthMap.set(key, cap);
+          }
+        } catch (e) {}
+      }
+    });
+    return Array.from(monthMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [rendiciones]);
+
+  // Available users for selector
+  const availableUsers = useMemo(() => {
+    const usersMap = new Map<string, string>();
+    rendiciones.forEach(r => {
+      if (r.userId && r.userName) {
+        usersMap.set(r.userId, r.userName);
+      }
+    });
+    return Array.from(usersMap.entries());
+  }, [rendiciones]);
+
+  // Filtered rendiciones list
+  const filteredRendiciones = useMemo(() => {
+    return rendiciones.filter(r => {
+      // Month filter
+      if (selectedMonth !== 'all') {
+        if (!r.createdAt) return false;
+        try {
+          const d = parseISO(r.createdAt);
+          if (format(d, 'yyyy-MM') !== selectedMonth) return false;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // User filter
+      if (selectedUserFilter !== 'all' && r.userId !== selectedUserFilter) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [rendiciones, selectedMonth, selectedUserFilter]);
+
+  const selectedMonthLabel = useMemo(() => {
+    if (selectedMonth === 'all') return null;
+    const found = availableMonths.find(([k]) => k === selectedMonth);
+    return found ? found[1] : selectedMonth;
+  }, [selectedMonth, availableMonths]);
 
   const handleDirectUploadAttachment = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -145,18 +206,23 @@ export function DashboardAdmin() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Panel de Administración</h2>
-          <p className="text-sm text-gray-500 mt-1">Supervisa y aprueba los bloques de rendiciones de la empresa.</p>
+          <p className="text-sm text-gray-500 mt-1">Supervisa, aprueba y liquida los bloques de rendiciones por mes o colaborador.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <button 
             onClick={() => {
-              if (rendiciones.length === 0) {
-                alert("No hay rendiciones registradas para compartir.");
+              if (filteredRendiciones.length === 0) {
+                alert("No hay rendiciones registradas en el filtro seleccionado.");
                 return;
               }
-              const msg = generateGeneralSummaryWhatsAppMessage(rendiciones, settings);
+              const msg = generateGeneralSummaryWhatsAppMessage(
+                filteredRendiciones, 
+                settings, 
+                undefined, 
+                selectedMonthLabel || undefined
+              );
               setShareWhatsAppModal({
-                title: "Resumen General de Viáticos para WhatsApp",
+                title: selectedMonthLabel ? `Resumen Mensual: ${selectedMonthLabel}` : "Resumen General de Viáticos para WhatsApp",
                 text: msg
               });
             }}
@@ -169,7 +235,7 @@ export function DashboardAdmin() {
           <button 
             onClick={async () => {
               try {
-                await exportToPDF(rendiciones, settings);
+                await exportToPDF(filteredRendiciones, settings);
               } catch (e) {
                 console.error("Error exporting PDF", e);
                 alert("Error al generar el reporte PDF.");
@@ -184,7 +250,7 @@ export function DashboardAdmin() {
           <button 
             onClick={async () => {
               try {
-                await exportRendicionReceiptsPDF(rendiciones, settings);
+                await exportRendicionReceiptsPDF(filteredRendiciones, settings);
               } catch (e: any) {
                 console.error("Error exporting receipts PDF", e);
                 alert(e.message || "Error al generar el reporte de recibos PDF.");
@@ -197,7 +263,7 @@ export function DashboardAdmin() {
             Reporte Recibos (PDF)
           </button>
           <button 
-            onClick={() => exportToExcel(rendiciones, settings)}
+            onClick={() => exportToExcel(filteredRendiciones, settings)}
             className="flex items-center px-3.5 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 transition-colors shadow-sm"
           >
             <FileSpreadsheet className="w-4 h-4 mr-2" />
@@ -206,22 +272,90 @@ export function DashboardAdmin() {
         </div>
       </div>
 
+      {/* MONTHLY & USER FILTER CONTROLS */}
+      <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-sm border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 className="font-bold text-base text-white flex items-center gap-2">
+            <span>🗓️ Filtro de Rendiciones por Mes y Colaborador</span>
+          </h3>
+          <p className="text-xs text-slate-300 mt-1">
+            Filtra para auditar liquidaciones de un mes específico o consultar gastos de un colaborador en particular.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-300 font-semibold">Mes:</span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-slate-800 text-white text-xs font-bold border border-slate-700 rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+            >
+              <option value="all">🗓️ Todos los meses ({rendiciones.length} bloques)</option>
+              {availableMonths.map(([key, label]) => (
+                <option key={key} value={key}>
+                  📅 {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-300 font-semibold">Colaborador:</span>
+            <select
+              value={selectedUserFilter}
+              onChange={(e) => setSelectedUserFilter(e.target.value)}
+              className="bg-slate-800 text-white text-xs font-bold border border-slate-700 rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+            >
+              <option value="all">👥 Todos los colaboradores</option>
+              {availableUsers.map(([uId, uName]) => (
+                <option key={uId} value={uId}>
+                  👤 {uName}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-sm font-medium text-gray-500">Bloques Pendientes</p>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{stats.pending}</p>
-          <p className="text-xs text-amber-600 mt-1 font-medium">Requieren atención</p>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-xs">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Bloques Pendientes</p>
+          <p className="text-2xl font-black text-amber-600 mt-1">{stats.pending}</p>
+          <p className="text-[11px] text-gray-500 mt-1">Bloques en revisión</p>
         </div>
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-sm font-medium text-gray-500">Total Aprobado</p>
-          <p className="text-3xl font-bold text-gray-900 mt-2">S/ {stats.approved.toFixed(2)}</p>
-          <p className="text-xs text-green-600 mt-1 font-medium">Gasto validado</p>
+
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-xs">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Fondos Entregados</p>
+          <p className="text-2xl font-black text-slate-800 mt-1">S/ {stats.totalFondos.toFixed(2)}</p>
+          <p className="text-[11px] text-gray-500 mt-1">Total desembolsado</p>
         </div>
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-sm font-medium text-gray-500">Volumen Total Procesado</p>
-          <p className="text-3xl font-bold text-gray-900 mt-2">S/ {stats.total.toFixed(2)}</p>
-          <p className="text-xs text-blue-600 mt-1 font-medium">Histórico acumulado</p>
+
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-xs">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Gastos Sustentados</p>
+          <p className="text-2xl font-black text-amber-900 mt-1">S/ {stats.totalGastado.toFixed(2)}</p>
+          <p className="text-[11px] text-green-600 mt-1 font-semibold">S/ {stats.approved.toFixed(2)} aprobados</p>
+        </div>
+
+        <div className={`p-5 rounded-xl border shadow-xs ${
+          stats.saldoGlobal > 0 ? 'bg-rose-50 border-rose-200' : stats.saldoGlobal < 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-blue-50 border-blue-200'
+        }`}>
+          <p className={`text-xs font-bold uppercase tracking-wider ${
+            stats.saldoGlobal > 0 ? 'text-rose-800' : stats.saldoGlobal < 0 ? 'text-emerald-800' : 'text-blue-800'
+          }`}>
+            Saldo / Liquidación
+          </p>
+          <p className={`text-2xl font-black mt-1 ${
+            stats.saldoGlobal > 0 ? 'text-rose-700' : stats.saldoGlobal < 0 ? 'text-emerald-700' : 'text-blue-700'
+          }`}>
+            S/ {Math.abs(stats.saldoGlobal).toFixed(2)}
+          </p>
+          <p className={`text-[11px] font-bold mt-1 ${
+            stats.saldoGlobal > 0 ? 'text-rose-700' : stats.saldoGlobal < 0 ? 'text-emerald-700' : 'text-blue-700'
+          }`}>
+            {stats.saldoGlobal > 0 ? '🔴 Favor Trabajador' : stats.saldoGlobal < 0 ? '🟢 Favor Empresa' : '🔵 Saldado'}
+          </p>
         </div>
       </div>
 
@@ -271,8 +405,15 @@ export function DashboardAdmin() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-sm">
-              {rendiciones.map((rendicion) => (
-                <React.Fragment key={rendicion.id}>
+              {filteredRendiciones.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                    No se encontraron rendiciones en el filtro seleccionado.
+                  </td>
+                </tr>
+              ) : (
+                filteredRendiciones.map((rendicion) => (
+                  <React.Fragment key={rendicion.id}>
                   <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => toggleRow(rendicion.id)}>
                     <td className="px-6 py-4 text-gray-400">
                       {expandedRow === rendicion.id ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -632,14 +773,8 @@ export function DashboardAdmin() {
                     </tr>
                   )}
                 </React.Fragment>
-              ))}
-              {rendiciones.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
-                    No hay bloques de rendiciones registrados
-                  </td>
-                </tr>
-              )}
+              ))
+            )}
             </tbody>
           </table>
         </div>

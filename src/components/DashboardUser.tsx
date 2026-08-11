@@ -28,6 +28,76 @@ export function DashboardUser() {
   const [uploadingCompId, setUploadingCompId] = useState<string | null>(null);
   const [liquidatingRendicion, setLiquidatingRendicion] = useState<Rendicion | null>(null);
   const [shareWhatsAppModal, setShareWhatsAppModal] = useState<{ title: string; text: string; rendicionObj?: Rendicion } | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+
+  // Filter only current user's rendiciones
+  const myRendiciones = rendiciones.filter(r => r.userId === currentUser.id);
+
+  // Available months for selector
+  const availableMonths = React.useMemo(() => {
+    const monthMap = new Map<string, string>();
+    myRendiciones.forEach(r => {
+      if (r.createdAt) {
+        try {
+          const d = parseISO(r.createdAt);
+          const key = format(d, 'yyyy-MM');
+          const label = format(d, 'MMMM yyyy', { locale: es });
+          const cap = label.charAt(0).toUpperCase() + label.slice(1);
+          if (!monthMap.has(key)) {
+            monthMap.set(key, cap);
+          }
+        } catch (e) {}
+      }
+    });
+    return Array.from(monthMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [myRendiciones]);
+
+  const filteredRendiciones = React.useMemo(() => {
+    if (selectedMonth === 'all') return myRendiciones;
+    return myRendiciones.filter(r => {
+      if (!r.createdAt) return false;
+      try {
+        const d = parseISO(r.createdAt);
+        return format(d, 'yyyy-MM') === selectedMonth;
+      } catch (e) {
+        return false;
+      }
+    });
+  }, [myRendiciones, selectedMonth]);
+
+  const selectedMonthLabel = React.useMemo(() => {
+    if (selectedMonth === 'all') return null;
+    const found = availableMonths.find(([k]) => k === selectedMonth);
+    return found ? found[1] : selectedMonth;
+  }, [selectedMonth, availableMonths]);
+
+  // Financial summary of filtered list
+  const monthStats = React.useMemo(() => {
+    let totalAdelantos = 0;
+    let totalGastado = 0;
+    let totalComprobantes = 0;
+
+    filteredRendiciones.forEach(r => {
+      // Import or inline total funds calculation
+      const prevBal = r.previousBalance || 0;
+      let initial = 0;
+      let extra = 0;
+      if (r.ingresos && r.ingresos.length > 0) {
+        initial = r.ingresos[0]?.amount || 0;
+        if (r.ingresos.length > 1) {
+          extra = r.ingresos.slice(1).reduce((sum, i) => sum + (i.amount || 0), 0);
+        }
+      } else {
+        initial = r.advanceAmount || 0;
+      }
+      totalAdelantos += (initial + extra + prevBal);
+      totalGastado += (r.totalAmount || 0);
+      totalComprobantes += (r.comprobantes?.length || 0);
+    });
+
+    const saldoNeto = totalGastado - totalAdelantos;
+    return { totalAdelantos, totalGastado, totalComprobantes, saldoNeto };
+  }, [filteredRendiciones]);
 
   const handleDirectUploadAttachment = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -113,9 +183,6 @@ export function DashboardUser() {
     }
   };
 
-  // Filter only current user's rendiciones
-  const myRendiciones = rendiciones.filter(r => r.userId === currentUser.id);
-
   const toggleExpand = (id: string, e: React.MouseEvent) => {
     // Avoid triggering expand if clicking on active buttons inside the row
     const target = e.target as HTMLElement;
@@ -153,19 +220,24 @@ export function DashboardUser() {
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Mis Rendiciones (Bloques)</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Revisa, gestiona y reporta tus gastos organizados en bloques de rendición.
+            Revisa, gestiona y reporta tus gastos organizados por meses y bloques de rendición.
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5 w-full sm:w-auto">
           <button 
             onClick={() => {
-              if (myRendiciones.length === 0) {
-                alert("No tienes rendiciones registradas para compartir.");
+              if (filteredRendiciones.length === 0) {
+                alert("No hay rendiciones registradas en el período seleccionado.");
                 return;
               }
-              const msg = generateGeneralSummaryWhatsAppMessage(myRendiciones, settings, currentUser.name);
+              const msg = generateGeneralSummaryWhatsAppMessage(
+                filteredRendiciones, 
+                settings, 
+                currentUser.name, 
+                selectedMonthLabel || undefined
+              );
               setShareWhatsAppModal({
-                title: "Resumen General para WhatsApp",
+                title: selectedMonthLabel ? `Resumen Mensual: ${selectedMonthLabel}` : "Resumen General para WhatsApp",
                 text: msg
               });
             }}
@@ -178,7 +250,7 @@ export function DashboardUser() {
           <button 
             onClick={async () => {
               try {
-                await exportToPDF(myRendiciones, settings);
+                await exportToPDF(filteredRendiciones, settings);
               } catch (e) {
                 console.error("Error exporting PDF", e);
                 alert("Error al generar el reporte PDF.");
@@ -192,7 +264,7 @@ export function DashboardUser() {
           <button 
             onClick={async () => {
               try {
-                await exportRendicionReceiptsPDF(myRendiciones, settings);
+                await exportRendicionReceiptsPDF(filteredRendiciones, settings);
               } catch (e: any) {
                 console.error("Error exporting receipts PDF", e);
                 alert(e.message || "Error al generar el reporte de recibos PDF.");
@@ -213,15 +285,105 @@ export function DashboardUser() {
         </div>
       </div>
 
+      {/* MONTHLY FILTER BAR & RESUMEN DE MES */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl p-5 shadow-md border border-slate-700/60 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-700/80">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-white leading-tight">
+                Filtro y Resumen por Mes
+              </h3>
+              <p className="text-xs text-slate-300">
+                Selecciona un mes específico para generar reportes y liquidaciones mensuales.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-300 font-medium whitespace-nowrap">
+              Mes:
+            </label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-slate-800 text-white text-xs font-bold border border-slate-600 rounded-xl px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden cursor-pointer"
+            >
+              <option value="all">🗓️ Todos los meses ({myRendiciones.length} bloques)</option>
+              {availableMonths.map(([key, label]) => (
+                <option key={key} value={key}>
+                  📅 {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Financial Summary Cards for the selected period */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-slate-800/80 border border-slate-700 rounded-xl p-3.5">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+              Fondos Recibidos {selectedMonthLabel ? `(${selectedMonthLabel})` : 'Global'}
+            </span>
+            <span className="text-xl font-extrabold text-white mt-1 block">
+              S/ {monthStats.totalAdelantos.toFixed(2)}
+            </span>
+            <span className="text-[10px] text-slate-400 mt-0.5 block">
+              {filteredRendiciones.length} bloques en el período
+            </span>
+          </div>
+
+          <div className="bg-amber-950/40 border border-amber-800/50 rounded-xl p-3.5">
+            <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider block">
+              Gastos Sustentados {selectedMonthLabel ? `(${selectedMonthLabel})` : 'Global'}
+            </span>
+            <span className="text-xl font-extrabold text-amber-200 mt-1 block">
+              S/ {monthStats.totalGastado.toFixed(2)}
+            </span>
+            <span className="text-[10px] text-amber-300/80 mt-0.5 block">
+              {monthStats.totalComprobantes} comprobantes registrados
+            </span>
+          </div>
+
+          <div className={`border rounded-xl p-3.5 ${
+            monthStats.saldoNeto > 0 
+              ? 'bg-rose-950/40 border-rose-800/50' 
+              : monthStats.saldoNeto < 0 
+              ? 'bg-emerald-950/40 border-emerald-800/50' 
+              : 'bg-blue-950/40 border-blue-800/50'
+          }`}>
+            <span className={`text-[11px] font-bold uppercase tracking-wider block ${
+              monthStats.saldoNeto > 0 ? 'text-rose-300' : monthStats.saldoNeto < 0 ? 'text-emerald-300' : 'text-blue-300'
+            }`}>
+              Liquidación / Saldo Resultante
+            </span>
+            <span className={`text-xl font-extrabold mt-1 block ${
+              monthStats.saldoNeto > 0 ? 'text-rose-200' : monthStats.saldoNeto < 0 ? 'text-emerald-200' : 'text-blue-200'
+            }`}>
+              S/ {Math.abs(monthStats.saldoNeto).toFixed(2)}
+            </span>
+            <span className={`text-[10px] font-bold mt-0.5 block ${
+              monthStats.saldoNeto > 0 ? 'text-rose-300/90' : monthStats.saldoNeto < 0 ? 'text-emerald-300/90' : 'text-blue-300/90'
+            }`}>
+              {monthStats.saldoNeto > 0 ? '🔴 Favor Trabajador (Reembolso)' : monthStats.saldoNeto < 0 ? '🟢 Favor Empresa (Devolución)' : '🔵 Cuentas Saldadas'}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Main expandable list */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        {myRendiciones.length === 0 ? (
+        {filteredRendiciones.length === 0 ? (
           <div className="bg-white rounded-xl p-12 text-center flex flex-col items-center">
             <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
               <FolderOpen className="w-8 h-8 text-blue-500" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">No hay bloques de rendiciones</h3>
-            <p className="text-gray-500 text-sm mb-6">Aún no has registrado ningún bloque de gastos.</p>
+            <p className="text-gray-500 text-sm mb-6">
+              {selectedMonthLabel ? `No registraste gastos en ${selectedMonthLabel}.` : 'Aún no has registrado ningún bloque de gastos.'}
+            </p>
             <Link 
               to="/new" 
               className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-xs"
@@ -231,7 +393,7 @@ export function DashboardUser() {
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {myRendiciones.map((rendicion) => {
+            {filteredRendiciones.map((rendicion) => {
               const advance = rendicion.advanceAmount || 0;
               const balance = advance - rendicion.totalAmount;
               const isExpanded = !!expandedIds[rendicion.id];

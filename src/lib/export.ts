@@ -1236,3 +1236,309 @@ export const exportRendicionReceiptsPDF = async (storeRendicion: Rendicion | Ren
     doc.save(`Recibos_${sanitizedBlockName}_${singleR.userName.replace(/\s+/g, '_')}.pdf`);
   }
 };
+
+/**
+ * Generates a beautiful 1-page corporate Ticket PDF with financial balance boxes, receipts table, and digital signatures.
+ */
+export const exportTicketPDF = async (rendicion: Rendicion, settings: AppSettings) => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const companyName = settings?.companyName || 'EMPRESA CORPORATIVA';
+  
+  // Calculate total funds without double-counting
+  const previousBalance = rendicion.previousBalance || 0;
+  let initialAdvance = 0;
+  let additionalIngresos = 0;
+
+  if (rendicion.ingresos && rendicion.ingresos.length > 0) {
+    initialAdvance = rendicion.ingresos[0]?.amount || 0;
+    if (rendicion.ingresos.length > 1) {
+      additionalIngresos = rendicion.ingresos.slice(1).reduce((acc, i) => acc + (i.amount || 0), 0);
+    }
+  } else {
+    initialAdvance = rendicion.advanceAmount || 0;
+  }
+
+  const totalFondos = initialAdvance + additionalIngresos + previousBalance;
+  const totalGastado = rendicion.totalAmount || 0;
+  const balance = totalGastado - totalFondos; // > 0 favor trabajador, < 0 favor empresa
+
+  const fechaEmision = format(new Date(), 'dd/MM/yyyy HH:mm');
+  const fechaRendicion = rendicion.createdAt 
+    ? format(new Date(rendicion.createdAt), 'dd/MM/yyyy')
+    : format(new Date(), 'dd/MM/yyyy');
+
+  // Page Outer Frame / Border
+  doc.setDrawColor(15, 23, 42); // slate-900
+  doc.setLineWidth(0.8);
+  doc.rect(8, 8, pageWidth - 16, doc.internal.pageSize.getHeight() - 16);
+
+  doc.setDrawColor(226, 232, 240); // slate-200
+  doc.setLineWidth(0.3);
+  doc.rect(10, 10, pageWidth - 20, doc.internal.pageSize.getHeight() - 20);
+
+  // Corporate Header Banner
+  doc.setFillColor(15, 23, 42); // Slate 900
+  doc.rect(12, 12, pageWidth - 24, 26, 'F');
+
+  // Company Logo / Name
+  if (settings.companyLogo) {
+    try {
+      doc.addImage(settings.companyLogo, 'PNG', 16, 14, 32, 22);
+    } catch (e) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(255, 255, 255);
+      doc.text(companyName.toUpperCase(), 16, 26);
+    }
+  } else {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text(companyName.toUpperCase(), 16, 26);
+  }
+
+  // Header Right Side: Document Title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(52, 211, 153); // Emerald 400
+  doc.text('TICKET CORPORATIVO DE VIÁTICOS', pageWidth - 16, 21, { align: 'right' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(203, 213, 225); // Slate 300
+  doc.text(`N° REF: TCK-${rendicion.id.slice(0, 8).toUpperCase()} | ${fechaEmision}`, pageWidth - 16, 28, { align: 'right' });
+
+  // Metadata Card Block (Gray background box)
+  let y = 42;
+  doc.setFillColor(248, 250, 252); // Slate 50
+  doc.setDrawColor(226, 232, 240);
+  doc.rect(12, y, pageWidth - 24, 28, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139); // Slate 500
+  doc.text('RESPONSABLE:', 16, y + 7);
+  doc.text('BLOQUE / OBRA:', 16, y + 14);
+  doc.text('TIPO RENDICIÓN:', 16, y + 21);
+
+  doc.text('FECHA REGISTRO:', 115, y + 7);
+  doc.text('ESTADO OFICIAL:', 115, y + 14);
+  doc.text('TOTAL COMPROBANTES:', 115, y + 21);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42); // Slate 900
+  doc.text(rendicion.userName.toUpperCase(), 45, y + 7);
+  doc.text(rendicion.name, 45, y + 14);
+  doc.text(rendicion.rendicionType || 'Logístico', 45, y + 21);
+
+  doc.text(fechaRendicion, 155, y + 7);
+
+  // Status Badge with Color
+  if (rendicion.status === 'Aprobado') {
+    doc.setTextColor(16, 185, 129); // Emerald
+    doc.text('✅ APROBADO', 155, y + 14);
+  } else if (rendicion.status === 'Rechazado') {
+    doc.setTextColor(239, 68, 68); // Red
+    doc.text('❌ RECHAZADO', 155, y + 14);
+  } else {
+    doc.setTextColor(217, 119, 6); // Amber
+    doc.text('⏳ PENDIENTE', 155, y + 14);
+  }
+
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${rendicion.comprobantes?.length || 0} Documentos`, 155, y + 21);
+
+  // FINANCIAL BALANCE BOXES (3 Columns)
+  y += 33;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('BALANCE Y RESUMEN FINANCIERO', 12, y);
+
+  y += 3;
+  const boxW = (pageWidth - 28) / 3;
+  const boxH = 22;
+
+  // Box 1: Fondos Entregados
+  doc.setFillColor(241, 245, 249); // Slate 100
+  doc.setDrawColor(203, 213, 225);
+  doc.rect(12, y, boxW, boxH, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('1. TOTAL FONDOS RECIBIDOS', 15, y + 6);
+
+  doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`S/ ${totalFondos.toFixed(2)}`, 15, y + 14);
+
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Inicial: S/ ${initialAdvance.toFixed(2)}${previousBalance !== 0 ? ` | Ant: S/ ${previousBalance.toFixed(2)}` : ''}`, 15, y + 19);
+
+  // Box 2: Total Gastado
+  const box2X = 14 + boxW;
+  doc.setFillColor(254, 243, 199); // Amber 100
+  doc.setDrawColor(252, 211, 77);
+  doc.rect(box2X, y, boxW, boxH, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(146, 64, 14); // Amber 800
+  doc.text('2. GASTOS SUSTENTADOS', box2X + 3, y + 6);
+
+  doc.setFontSize(12);
+  doc.setTextColor(120, 53, 15);
+  doc.text(`S/ ${totalGastado.toFixed(2)}`, box2X + 3, y + 14);
+
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${rendicion.comprobantes?.length || 0} comprobantes reportados`, box2X + 3, y + 19);
+
+  // Box 3: Liquidación Resultante
+  const box3X = 16 + (boxW * 2);
+  let box3Bg = [239, 246, 255]; // Blue 50
+  let box3Border = [191, 219, 254];
+  let box3Text = [29, 78, 216];
+  let resultLabel = '🔵 SALDO EQUILIBRADO';
+
+  if (balance > 0) {
+    box3Bg = [254, 242, 242]; // Rose 50
+    box3Border = [254, 202, 202];
+    box3Text = [190, 18, 60]; // Rose 700
+    resultLabel = '🔴 A FAVOR TRABAJADOR';
+  } else if (balance < 0) {
+    box3Bg = [236, 253, 245]; // Emerald 50
+    box3Border = [167, 243, 208];
+    box3Text = [4, 120, 87]; // Emerald 700
+    resultLabel = '🟢 A DEVOLVER A EMPRESA';
+  }
+
+  doc.setFillColor(box3Bg[0], box3Bg[1], box3Bg[2]);
+  doc.setDrawColor(box3Border[0], box3Border[1], box3Border[2]);
+  doc.rect(box3X, y, boxW, boxH, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(box3Text[0], box3Text[1], box3Text[2]);
+  doc.text('3. RESULTADO LIQUIDACIÓN', box3X + 3, y + 6);
+
+  doc.setFontSize(12);
+  doc.text(`S/ ${Math.abs(balance).toFixed(2)}`, box3X + 3, y + 14);
+
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text(resultLabel, box3X + 3, y + 19);
+
+  // DETALLE DE COMPROBANTES TABLE
+  y += boxH + 8;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`DETALLE DE COMPROBANTES Y FACTURACIÓN (${rendicion.comprobantes?.length || 0})`, 12, y);
+
+  const tableHead = [['N°', 'Tipo Doc.', 'Número', 'Razón Social / Proveedor', 'Categoría', 'Monto']];
+  const tableBody = (rendicion.comprobantes || []).map((c, idx) => [
+    (idx + 1).toString(),
+    c.type || 'Doc',
+    c.documentNumber || '-',
+    c.razonSocial || c.ruc || '-',
+    c.category || 'General',
+    `S/ ${c.amount.toFixed(2)}`
+  ]);
+
+  autoTable(doc, {
+    head: tableHead,
+    body: tableBody,
+    startY: y + 3,
+    theme: 'grid',
+    styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2 },
+    headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', halign: 'left' },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 'auto' },
+      4: { cellWidth: 30 },
+      5: { cellWidth: 25, halign: 'right', fontStyle: 'bold' }
+    }
+  });
+
+  let finalY = (doc as any).lastAutoTable.finalY + 12;
+
+  // SIGNATURES SECTION
+  if (finalY > 230) {
+    doc.addPage();
+    finalY = 25;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42);
+  doc.text('CONFORMIDAD Y FIRMAS CORPORATIVAS', 12, finalY);
+
+  finalY += 4;
+  const sigBoxW = (pageWidth - 28) / 2;
+  const sigBoxH = 32;
+
+  // Employee Signature Box (Left)
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(203, 213, 225);
+  doc.rect(12, finalY, sigBoxW, sigBoxH);
+
+  if (rendicion.signature) {
+    try {
+      doc.addImage(rendicion.signature, 'PNG', 16, finalY + 2, 40, 18);
+    } catch (e) {
+      console.warn("Could not render signature in Ticket PDF", e);
+    }
+  }
+
+  const sigLineY = finalY + 22;
+  doc.setDrawColor(148, 163, 184);
+  doc.line(16, sigLineY, 12 + sigBoxW - 8, sigLineY);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('FIRMA DEL COLABORADOR', 16, sigLineY + 4);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Nombre: ${rendicion.userName}`, 16, sigLineY + 8);
+
+  // Admin Signature Box (Right)
+  const sig2X = 16 + sigBoxW;
+  doc.rect(sig2X, finalY, sigBoxW, sigBoxH);
+
+  doc.line(sig2X + 8, sigLineY, sig2X + sigBoxW - 8, sigLineY);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('V°B° CONTABILIDAD / ADMINISTRACIÓN', sig2X + 8, sigLineY + 4);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Aprobado: ${companyName}`, sig2X + 8, sigLineY + 8);
+
+  // FOOTER
+  const footerY = doc.internal.pageSize.getHeight() - 12;
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.5);
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Ticket de Rendición Oficial de Gastos - ${companyName} | Documento verificado digitalmente`, pageWidth / 2, footerY, { align: 'center' });
+
+  const sanitizedName = rendicion.name.replace(/[^a-zA-Z0-9]/g, '_');
+  doc.save(`Ticket_Rendicion_${sanitizedName}_${rendicion.userName.replace(/\s+/g, '_')}.pdf`);
+};
+

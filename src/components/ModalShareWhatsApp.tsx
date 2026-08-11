@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Send, Copy, Check, MessageSquare, Ticket, FileText, Building2, User, Calendar, Tag, AlertCircle, Sparkles } from 'lucide-react';
+import { X, Send, Copy, Check, MessageSquare, Ticket, FileText, Building2, User, Calendar, Tag, AlertCircle, Sparkles, Download, FileCheck } from 'lucide-react';
 import { shareToWhatsApp, copyToClipboard, getRendicionTotalFondos } from '../lib/whatsapp';
+import { exportTicketPDF } from '../lib/export';
 import { Rendicion, AppSettings } from '../types';
 import { format, parseISO } from 'date-fns';
 
@@ -270,6 +271,19 @@ export const ModalShareWhatsApp: React.FC<ModalShareWhatsAppProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Signature Preview Status */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <FileCheck className="w-4 h-4 text-emerald-600" />
+                    <span className="font-medium">
+                      Firma Digital: {rendicionObj.signature ? <strong className="text-emerald-700">Registrada</strong> : <span className="text-slate-400">Pendiente</span>}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Aprobado por: {companyName}
+                  </span>
+                </div>
               </div>
 
               {/* Ticket Footer */}
@@ -309,23 +323,37 @@ export const ModalShareWhatsApp: React.FC<ModalShareWhatsAppProps> = ({
 
         {/* Modal Actions */}
         <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2.5 border border-slate-300 hover:bg-white text-slate-700 rounded-xl text-xs font-bold transition-all shadow-2xs gap-2 cursor-pointer"
-          >
-            {copied ? (
-              <>
-                <Check className="w-4 h-4 text-emerald-600" />
-                ¡Texto Copiado!
-              </>
-            ) : (
-              <>
-                <Copy className="w-4 h-4 text-slate-500" />
-                Copiar Texto Ticket
-              </>
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="inline-flex items-center justify-center px-4 py-2.5 border border-slate-300 hover:bg-white text-slate-700 rounded-xl text-xs font-bold transition-all shadow-2xs gap-2 cursor-pointer"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  ¡Texto Copiado!
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4 text-slate-500" />
+                  Copiar Texto Ticket
+                </>
+              )}
+            </button>
+
+            {rendicionObj && settings && (
+              <button
+                type="button"
+                onClick={() => exportTicketPDF(rendicionObj, settings)}
+                className="inline-flex items-center justify-center px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-sm gap-2 cursor-pointer"
+                title="Descargar ticket corporativo en formato PDF con firmas y cajas de balance"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                Descargar Ticket PDF
+              </button>
             )}
-          </button>
+          </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <button

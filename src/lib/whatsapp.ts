@@ -109,12 +109,13 @@ export const generateSingleRendicionWhatsAppMessage = (
 };
 
 /**
- * Generates a formal summary message of multiple Rendiciones for WhatsApp.
+ * Generates a formal summary message of multiple Rendiciones (or monthly summary) for WhatsApp.
  */
 export const generateGeneralSummaryWhatsAppMessage = (
   rendiciones: Rendicion[],
   settings: AppSettings,
-  userName?: string
+  userName?: string,
+  monthTitle?: string
 ): string => {
   const companyName = settings?.companyName || 'Empresa';
   let totalFondos = 0;
@@ -132,18 +133,23 @@ export const generateGeneralSummaryWhatsAppMessage = (
 
   let balanceText = '';
   if (netBalance > 0) {
-    balanceText = `🔴 Saldo Global Favor Trabajadores: S/ ${netBalance.toFixed(2)}`;
+    balanceText = `🔴 Saldo Global Favor Trabajador: S/ ${netBalance.toFixed(2)}`;
   } else if (netBalance < 0) {
     balanceText = `🟢 Saldo Global Favor Empresa: S/ ${Math.abs(netBalance).toFixed(2)}`;
   } else {
     balanceText = `🔵 Saldo General Equilibrado: S/ 0.00`;
   }
 
+  const headerTitle = monthTitle 
+    ? `RESUMEN MENSUAL: ${monthTitle.toUpperCase()}`
+    : `RESUMEN GENERAL DE VIÁTICOS Y GASTOS`;
+
   let msg = `┌──────────────────────────────────────────┐\n`;
-  msg += `│ 📊 RESUMEN GENERAL DE VIÁTICOS Y GASTOS   │\n`;
+  msg += `│ 📊 ${headerTitle.padEnd(38, ' ')}│\n`;
   msg += `├──────────────────────────────────────────┤\n`;
   msg += `│ 🏢 Empresa: *${companyName.toUpperCase()}*\n`;
   if (userName) msg += `│ 👤 Usuario: *${userName}*\n`;
+  if (monthTitle) msg += `│ 🗓️ Período: *${monthTitle}*\n`;
   msg += `│ 📅 Fecha:   ${format(new Date(), 'dd/MM/yyyy hh:mm a')}\n`;
   msg += `├──────────────────────────────────────────┤\n`;
   msg += `│ 📈 BALANCE CONSOLIDADO (${rendiciones.length} Bloques / ${totalDocs} Docs)│\n`;
