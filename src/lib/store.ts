@@ -113,10 +113,7 @@ export const useAppStore = create<AppState>()(
 
           if (compCopy.receiptPhoto) {
             const photoVal = compCopy.receiptPhoto;
-            const keysToSave = [
-              compId,
-              `${newId}_${compId}`
-            ].filter(Boolean) as string[];
+            const keysToSave = [compId].filter(Boolean) as string[];
 
             uploadPromises.push(savePhotoToFirestoreDoc(photoVal, keysToSave));
 
@@ -157,15 +154,15 @@ export const useAppStore = create<AppState>()(
 
         get().addNotification('admin1', 'Nueva Rendición', `${currentUser.name} ha enviado el bloque "${name}" por S/ ${totalAmount.toFixed(2)}.`);
 
-        // 2. Perform Firestore save: main doc first for fast response
+        // 2. Perform Firestore save asynchronously in background for ultra-fast UI save
         const cleanRendicion = JSON.parse(JSON.stringify({
           ...localRendicion,
           comprobantes: comprobantesToSave
         }));
 
-        await setDoc(doc(db, 'rendiciones', newId), cleanRendicion);
+        setDoc(doc(db, 'rendiciones', newId), cleanRendicion)
+          .catch(err => console.error("Error saving rendicion doc to Firestore:", err));
 
-        // 3. Process photo uploads asynchronously in background without blocking form submission
         if (uploadPromises.length > 0) {
           Promise.all(uploadPromises).catch(err => console.error("Error in background photo uploads:", err));
         }
@@ -201,10 +198,7 @@ export const useAppStore = create<AppState>()(
 
             if (compCopy.receiptPhoto) {
               const photoVal = compCopy.receiptPhoto;
-              const keysToSave = [
-                compId,
-                `${id}_${compId}`
-              ].filter(Boolean) as string[];
+              const keysToSave = [compId].filter(Boolean) as string[];
 
               uploadPromises.push(savePhotoToFirestoreDoc(photoVal, keysToSave));
 
@@ -231,15 +225,15 @@ export const useAppStore = create<AppState>()(
           } : r)
         }));
 
-        // 2. Perform Firestore save: main doc first for fast response
+        // 2. Perform Firestore save asynchronously in background for instant user feedback
         const cleanUpdateData = JSON.parse(JSON.stringify({
           ...updateData,
           ...(comprobantesToSave !== undefined ? { comprobantes: comprobantesToSave } : {})
         }));
 
-        await updateDoc(rendicionRef, cleanUpdateData);
+        updateDoc(rendicionRef, cleanUpdateData)
+          .catch(err => console.error("Error updating rendicion in Firestore:", err));
 
-        // 3. Process photo uploads asynchronously in background without blocking form submission
         if (uploadPromises.length > 0) {
           Promise.all(uploadPromises).catch(err => console.error("Error in background photo uploads:", err));
         }

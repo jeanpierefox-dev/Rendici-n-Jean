@@ -748,7 +748,7 @@ export function FormRendicion() {
       }
       setLoading(false);
       setSuccess(true);
-      setTimeout(() => navigate('/'), 1500);
+      setTimeout(() => navigate('/'), 800);
     } catch (error: any) {
       console.error(error);
       setLoading(false);

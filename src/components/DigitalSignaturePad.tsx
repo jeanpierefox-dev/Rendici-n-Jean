@@ -85,6 +85,12 @@ export const DigitalSignaturePad: React.FC<DigitalSignaturePadProps> = ({
   const stopDrawing = () => {
     if (!isDrawing) return;
     setIsDrawing(false);
+    const canvas = canvasRef.current;
+    if (canvas && hasDrawn) {
+      const base64 = canvas.toDataURL('image/png');
+      setCurrentSignature(base64);
+      onSaveSignature(base64);
+    }
   };
 
   const handleApplySignature = () => {
