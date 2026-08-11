@@ -27,7 +27,7 @@ export function DashboardUser() {
   const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null);
   const [uploadingCompId, setUploadingCompId] = useState<string | null>(null);
   const [liquidatingRendicion, setLiquidatingRendicion] = useState<Rendicion | null>(null);
-  const [shareWhatsAppModal, setShareWhatsAppModal] = useState<{ title: string; text: string } | null>(null);
+  const [shareWhatsAppModal, setShareWhatsAppModal] = useState<{ title: string; text: string; rendicionObj?: Rendicion } | null>(null);
 
   const handleDirectUploadAttachment = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -409,7 +409,8 @@ export function DashboardUser() {
                                 const msg = generateSingleRendicionWhatsAppMessage(rendicion, settings);
                                 setShareWhatsAppModal({
                                   title: `Compartir ${rendicion.name}`,
-                                  text: msg
+                                  text: msg,
+                                  rendicionObj: rendicion
                                 });
                               }}
                               className="w-full inline-flex items-center justify-center px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer gap-2"
@@ -606,6 +607,8 @@ export function DashboardUser() {
         <ModalShareWhatsApp
           title={shareWhatsAppModal.title}
           initialMessage={shareWhatsAppModal.text}
+          rendicionObj={shareWhatsAppModal.rendicionObj}
+          settings={settings}
           onClose={() => setShareWhatsAppModal(null)}
         />
       )}

@@ -28,7 +28,7 @@ export function FormRendicion() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
-  const [shareWhatsAppModal, setShareWhatsAppModal] = useState<{ title: string; text: string } | null>(null);
+  const [shareWhatsAppModal, setShareWhatsAppModal] = useState<{ title: string; text: string; rendicionObj?: Rendicion } | null>(null);
 
   // Comprobante Form state
   const [editingComprobanteId, setEditingComprobanteId] = useState<string | null>(null);
@@ -817,7 +817,7 @@ export function FormRendicion() {
                 name: name || 'Rendición en borrador',
                 rendicionType: rendicionType || 'Logístico',
                 userName: currentUser?.name || 'Colaborador',
-                advanceAmount: comprobantes.reduce((sum, c) => sum + (c.amount || 0), 0) > 0 ? (ingresos.reduce((sum, i) => sum + (i.amount || 0), 0) + previousBalance) : 0,
+                advanceAmount: ingresos.reduce((sum, i) => sum + (i.amount || 0), 0),
                 advanceDate: format(new Date(), 'yyyy-MM-dd'),
                 totalAmount: comprobantes.reduce((sum, c) => sum + (c.amount || 0), 0),
                 comprobantes: comprobantes,
@@ -829,7 +829,8 @@ export function FormRendicion() {
               const msg = generateSingleRendicionWhatsAppMessage(currentRendicionObj, settings);
               setShareWhatsAppModal({
                 title: `Compartir Resumen por WhatsApp`,
-                text: msg
+                text: msg,
+                rendicionObj: currentRendicionObj
               });
             }}
             className="inline-flex items-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors cursor-pointer shadow-xs gap-1.5"
@@ -1633,6 +1634,8 @@ export function FormRendicion() {
         <ModalShareWhatsApp
           title={shareWhatsAppModal.title}
           initialMessage={shareWhatsAppModal.text}
+          rendicionObj={shareWhatsAppModal.rendicionObj}
+          settings={settings}
           onClose={() => setShareWhatsAppModal(null)}
         />
       )}

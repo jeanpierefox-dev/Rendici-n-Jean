@@ -21,7 +21,7 @@ export function DashboardAdmin() {
   const [uploadingCompId, setUploadingCompId] = useState<string | null>(null);
   const [generatingPdfKey, setGeneratingPdfKey] = useState<string | null>(null);
   const [liquidatingRendicion, setLiquidatingRendicion] = useState<Rendicion | null>(null);
-  const [shareWhatsAppModal, setShareWhatsAppModal] = useState<{ title: string; text: string } | null>(null);
+  const [shareWhatsAppModal, setShareWhatsAppModal] = useState<{ title: string; text: string; rendicionObj?: Rendicion } | null>(null);
 
   const handleDirectUploadAttachment = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -539,7 +539,8 @@ export function DashboardAdmin() {
                                 const msg = generateSingleRendicionWhatsAppMessage(rendicion, settings);
                                 setShareWhatsAppModal({
                                   title: `Compartir ${rendicion.name}`,
-                                  text: msg
+                                  text: msg,
+                                  rendicionObj: rendicion
                                 });
                               }}
                               className="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors gap-2 cursor-pointer shadow-xs"
@@ -657,6 +658,8 @@ export function DashboardAdmin() {
         <ModalShareWhatsApp
           title={shareWhatsAppModal.title}
           initialMessage={shareWhatsAppModal.text}
+          rendicionObj={shareWhatsAppModal.rendicionObj}
+          settings={settings}
           onClose={() => setShareWhatsAppModal(null)}
         />
       )}
