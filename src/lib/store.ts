@@ -109,11 +109,24 @@ export const useAppStore = create<AppState>()(
 
         for (const c of comprobantes) {
           const compId = (c as any).id || safeUUID();
-          const compCopy = { ...c, id: compId };
+          const compCopy = { 
+            ...c, 
+            id: compId,
+            documentNumber: (c.documentNumber || '').trim(),
+            ruc: (c.ruc || '').trim(),
+            razonSocial: (c.razonSocial || '').trim(),
+            category: c.category || 'Otros',
+            observation: c.observation || ''
+          };
 
           if (compCopy.receiptPhoto) {
             const photoVal = compCopy.receiptPhoto;
-            const keysToSave = [compId].filter(Boolean) as string[];
+            const keysToSave = [
+              compId, 
+              compCopy.documentNumber, 
+              `${newId}_${compId}`, 
+              compCopy.documentNumber ? `${newId}_${compCopy.documentNumber}` : null
+            ].filter(Boolean) as string[];
 
             uploadPromises.push(savePhotoToFirestoreDoc(photoVal, keysToSave));
 
@@ -127,6 +140,13 @@ export const useAppStore = create<AppState>()(
           }
         }
 
+        const cleanIngresos = (ingresos || []).map(ing => ({
+          id: ing.id || safeUUID(),
+          amount: Number(ing.amount) || 0,
+          date: ing.date || new Date().toISOString().split('T')[0],
+          reference: ing.reference || ''
+        }));
+
         const localRendicion: any = {
           id: newId,
           name,
@@ -135,6 +155,7 @@ export const useAppStore = create<AppState>()(
           userId: currentUser.id,
           userName: currentUser.name,
           comprobantes: localComprobantes,
+          ingresos: cleanIngresos,
           totalAmount,
           advanceAmount,
           rendicionType: rendicionType || 'Logístico'
@@ -180,6 +201,15 @@ export const useAppStore = create<AppState>()(
           }
         }
         
+        if (updateData.ingresos) {
+          updateData.ingresos = updateData.ingresos.map((ing: any) => ({
+            id: ing.id || safeUUID(),
+            amount: Number(ing.amount) || 0,
+            date: ing.date || new Date().toISOString().split('T')[0],
+            reference: ing.reference || ''
+          }));
+        }
+
         if (updateData.comprobantes) {
           updateData.totalAmount = updateData.comprobantes.reduce((sum: number, c: any) => sum + c.amount, 0);
         }
@@ -194,11 +224,24 @@ export const useAppStore = create<AppState>()(
 
           for (const c of updateData.comprobantes) {
             const compId = (c as any).id || safeUUID();
-            const compCopy = { ...c, id: compId };
+            const compCopy = { 
+              ...c, 
+              id: compId,
+              documentNumber: (c.documentNumber || '').trim(),
+              ruc: (c.ruc || '').trim(),
+              razonSocial: (c.razonSocial || '').trim(),
+              category: c.category || 'Otros',
+              observation: c.observation || ''
+            };
 
             if (compCopy.receiptPhoto) {
               const photoVal = compCopy.receiptPhoto;
-              const keysToSave = [compId].filter(Boolean) as string[];
+              const keysToSave = [
+                compId, 
+                compCopy.documentNumber, 
+                `${id}_${compId}`, 
+                compCopy.documentNumber ? `${id}_${compCopy.documentNumber}` : null
+              ].filter(Boolean) as string[];
 
               uploadPromises.push(savePhotoToFirestoreDoc(photoVal, keysToSave));
 

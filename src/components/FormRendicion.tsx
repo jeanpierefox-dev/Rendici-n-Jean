@@ -11,6 +11,7 @@ import { db } from '../lib/firebase';
 import { fetchPhotoForComprobante, formatPhotoDataUrl } from '../lib/export';
 import { ModalShareWhatsApp } from './ModalShareWhatsApp';
 import { generateSingleRendicionWhatsAppMessage } from '../lib/whatsapp';
+import { ModalReceiptViewer } from './ModalReceiptViewer';
 
 export function FormRendicion() {
   const { id } = useParams<{ id: string }>();
@@ -381,13 +382,22 @@ export function FormRendicion() {
     setSaveStatus('saving');
     setErrorMessage('');
     
-    // Sum of all ingresos is the main advanceAmount for backward compatibility with admins and statistics
-    const sumIngresos = updatedIngresos.reduce((sum, ing) => sum + ing.amount, 0);
-    // Find earliest date or main date
-    const primaryDate = updatedIngresos.length > 0 ? updatedIngresos[0].date : (new Date().toISOString().split('T')[0]);
+    // Clean ingresos array to ensure no undefined fields reach Firestore
+    const cleanIngs = (updatedIngresos || []).map(ing => ({
+      id: ing.id || safeUUID(),
+      amount: Number(ing.amount) || 0,
+      date: ing.date || new Date().toISOString().split('T')[0],
+      reference: ing.reference || ''
+    }));
 
-    // Keep updatedComprobantes in local state so receiptPhoto is available for viewing & PDF export
+    // Sum of all ingresos is the main advanceAmount for backward compatibility with admins and statistics
+    const sumIngresos = cleanIngs.reduce((sum, ing) => sum + ing.amount, 0);
+    // Find earliest date or main date
+    const primaryDate = cleanIngs.length > 0 ? cleanIngs[0].date : (new Date().toISOString().split('T')[0]);
+
+    // Keep updated state local so UI and export methods stay in sync
     setComprobantes(updatedComprobantes);
+    setIngresos(cleanIngs);
 
     try {
       const payload: any = {
@@ -396,7 +406,7 @@ export function FormRendicion() {
         advanceAmount: sumIngresos,
         advanceDate: primaryDate,
         comprobantes: updatedComprobantes,
-        ingresos: updatedIngresos,
+        ingresos: cleanIngs,
         signature: updatedSignature !== undefined ? updatedSignature : signature,
         previousBalance,
         previousBalanceSourceId,
@@ -667,9 +677,9 @@ export function FormRendicion() {
         if (ing.id === editingIngresoId) {
           return {
             ...ing,
-            amount: parseFloat(ingAmount),
+            amount: parseFloat(ingAmount) || 0,
             date: ingDate,
-            reference: ingReference.trim() || undefined
+            reference: ingReference.trim()
           };
         }
         return ing;
@@ -678,9 +688,9 @@ export function FormRendicion() {
       // Creating a new ingreso
       const newIng: Ingreso = {
         id: safeUUID(),
-        amount: parseFloat(ingAmount),
+        amount: parseFloat(ingAmount) || 0,
         date: ingDate,
-        reference: ingReference.trim() || undefined
+        reference: ingReference.trim()
       };
       updatedIngresos = [...ingresos, newIng];
     }
@@ -696,6 +706,35 @@ export function FormRendicion() {
 
     if (isEditing && id) {
       await autoSaveBlock(comprobantes, updatedIngresos, signature);
+    } else {
+      // Transition seamlessly from /new to /edit/:newId to persist initial block with the new ingreso
+      setSaveStatus('saving');
+      try {
+        const blockName = name.trim() || 'Rendición Temporal';
+        const sumIngresos = updatedIngresos.reduce((sum, ing) => sum + ing.amount, 0);
+        const primaryDate = updatedIngresos.length > 0 ? updatedIngresos[0].date : (new Date().toISOString().split('T')[0]);
+
+        const newId = await addRendicion(
+          blockName,
+          sumIngresos,
+          comprobantes,
+          signature,
+          primaryDate,
+          updatedIngresos,
+          rendicionType,
+          previousBalance,
+          previousBalanceSourceId,
+          previousBalanceSourceName
+        );
+
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+        setIsLoaded(true);
+        navigate(`/edit/${newId}`, { replace: true });
+      } catch (err) {
+        console.error("Error creating block on ingreso addition:", err);
+        setSaveStatus('error');
+      }
     }
   };
 
@@ -1584,50 +1623,10 @@ export function FormRendicion() {
 
       {/* --- MODAL PARA VISUALIZAR COMPROBANTE / RECIBO ATTACHMENT --- */}
       {selectedImage && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200">
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800">
-              <div className="flex items-center space-x-2">
-                <FileText className="w-5 h-5 text-blue-400" />
-                <h3 className="font-bold text-sm sm:text-base tracking-wide">Vista Detallada del Comprobante / Recibo Adjunto</h3>
-              </div>
-              <div className="flex items-center space-x-2">
-                <a
-                  href={selectedImage}
-                  download={`comprobante_${Date.now()}.${selectedImage.startsWith('data:application/pdf') ? 'pdf' : 'jpg'}`}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold inline-flex items-center transition-colors shadow-xs"
-                >
-                  <Download className="w-3.5 h-3.5 mr-1.5" /> Descargar Archivo
-                </a>
-                <button
-                  onClick={() => setSelectedImage(null)}
-                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-                  title="Cerrar ventana"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-            <div className="p-4 overflow-auto flex-1 flex justify-center items-center bg-slate-950/90 min-h-[300px]">
-              {selectedImage.startsWith('data:application/pdf') ? (
-                <iframe
-                  src={selectedImage}
-                  title="Vista previa PDF"
-                  className="w-full h-[70vh] rounded-lg bg-white border-0"
-                />
-              ) : (
-                <img
-                  src={selectedImage}
-                  alt="Comprobante Adjunto"
-                  className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-xl"
-                />
-              )}
-            </div>
-            <div className="p-3 bg-slate-100 border-t border-slate-200 text-center text-xs text-slate-600 font-medium">
-              Este archivo está correctamente vinculado a tu comprobante y se incluirá en el reporte en PDF de recibos.
-            </div>
-          </div>
-        </div>
+        <ModalReceiptViewer 
+          receiptUrl={selectedImage} 
+          onClose={() => setSelectedImage(null)} 
+        />
       )}
       {/* Modal de Compartir por WhatsApp */}
       {shareWhatsAppModal && (
