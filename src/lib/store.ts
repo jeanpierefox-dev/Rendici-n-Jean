@@ -260,21 +260,43 @@ export const useAppStore = create<AppState>()(
         }
 
         // 1. Instantly update local Zustand state so UI re-renders immediately!
-        set((state) => ({
-          rendiciones: state.rendiciones.map(r => r.id === id ? { 
-            ...r, 
-            ...updateData,
-            ...(updatedLocalComprobantes !== undefined ? { comprobantes: updatedLocalComprobantes } : {})
-          } : r)
-        }));
+        set((state) => {
+          const exists = state.rendiciones.some(r => r.id === id);
+          if (exists) {
+            return {
+              rendiciones: state.rendiciones.map(r => r.id === id ? { 
+                ...r, 
+                ...updateData,
+                ...(updatedLocalComprobantes !== undefined ? { comprobantes: updatedLocalComprobantes } : {})
+              } : r)
+            };
+          } else {
+            const newItem: any = {
+              id,
+              name: updateData.name || 'Rendición',
+              status: 'Pendiente',
+              createdAt: new Date().toISOString(),
+              userId: get().currentUser.id,
+              userName: get().currentUser.name,
+              totalAmount: updateData.totalAmount || 0,
+              advanceAmount: updateData.advanceAmount || 0,
+              rendicionType: updateData.rendicionType || 'Logístico',
+              ...updateData,
+              comprobantes: updatedLocalComprobantes || updateData.comprobantes || []
+            };
+            return {
+              rendiciones: [newItem, ...state.rendiciones]
+            };
+          }
+        });
 
-        // 2. Perform Firestore save asynchronously in background for instant user feedback
+        // 2. Perform Firestore save asynchronously using setDoc with merge: true
         const cleanUpdateData = JSON.parse(JSON.stringify({
           ...updateData,
           ...(comprobantesToSave !== undefined ? { comprobantes: comprobantesToSave } : {})
         }));
 
-        updateDoc(rendicionRef, cleanUpdateData)
+        setDoc(rendicionRef, cleanUpdateData, { merge: true })
           .catch(err => console.error("Error updating rendicion in Firestore:", err));
 
         if (uploadPromises.length > 0) {
