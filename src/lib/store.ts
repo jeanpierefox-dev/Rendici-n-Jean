@@ -163,7 +163,7 @@ export const useAppStore = create<AppState>()(
 
         if (advanceDate !== undefined) localRendicion.advanceDate = advanceDate;
         if (signature !== undefined) localRendicion.signature = signature;
-        if (ingresos !== undefined) localRendicion.ingresos = ingresos;
+        if (cleanIngresos !== undefined) localRendicion.ingresos = cleanIngresos;
         if (previousBalance !== undefined) localRendicion.previousBalance = previousBalance;
         if (previousBalanceSourceId !== undefined) localRendicion.previousBalanceSourceId = previousBalanceSourceId;
         if (previousBalanceSourceName !== undefined) localRendicion.previousBalanceSourceName = previousBalanceSourceName;

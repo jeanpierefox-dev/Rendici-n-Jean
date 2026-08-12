@@ -36,12 +36,13 @@ export function FormRendicion() {
   const [type, setType] = useState<DocType>('Factura');
   const [documentNumber, setDocumentNumber] = useState('');
   const [ruc, setRuc] = useState('');
-  const [date, setDate] = useState('');
+  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [amount, setAmount] = useState('');
   const [receiptPhoto, setReceiptPhoto] = useState<string | undefined>();
   const [category, setCategory] = useState('Transporte');
   const [observation, setObservation] = useState('');
   const [showDocForm, setShowDocForm] = useState(true);
+  const [itemAddedMsg, setItemAddedMsg] = useState<string | null>(null);
 
   const [razonSocial, setRazonSocial] = useState('');
   const [loadingRuc, setLoadingRuc] = useState(false);
@@ -204,6 +205,7 @@ export function FormRendicion() {
   const [ingDate, setIngDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [ingReference, setIngReference] = useState('');
   const [showIngForm, setShowIngForm] = useState(false);
+  const [ingSuccessMsg, setIngSuccessMsg] = useState<string | null>(null);
   
   // Previous carried-over balance fields
   const [previousBalance, setPreviousBalance] = useState<number>(0);
@@ -513,7 +515,7 @@ export function FormRendicion() {
     setEmisorDocType('RUC');
     setRazonSocial('');
     setRucError('');
-    setDate('');
+    setDate(new Date().toISOString().split('T')[0]);
     setAmount('');
     setReceiptPhoto(undefined);
     setUploadedFileName(null);
@@ -521,6 +523,7 @@ export function FormRendicion() {
     setFileSuccessMsg(null);
     setCategory('Transporte');
     setObservation('');
+    setItemAddedMsg(null);
     setShowDocForm(comprobantes.length === 0);
   };
 
@@ -533,6 +536,11 @@ export function FormRendicion() {
       return;
     }
 
+    const docNumClean = documentNumber.trim() || 'S/N';
+    const rucClean = ruc.trim() || (emisorDocType === 'RUC' ? '00000000000' : '00000000');
+    const razonSocialClean = razonSocial.trim() || (type === 'Otros' ? 'Gasto Varios' : 'Varios');
+    const dateClean = date || new Date().toISOString().split('T')[0];
+
     let updatedComprobantes: Comprobante[];
 
     if (editingComprobanteId) {
@@ -544,10 +552,10 @@ export function FormRendicion() {
           return {
             ...c,
             type,
-            documentNumber: documentNumber.trim(),
-            ruc: ruc.trim(),
-            razonSocial: razonSocial.trim(),
-            date,
+            documentNumber: docNumClean,
+            ruc: rucClean,
+            razonSocial: razonSocialClean,
+            date: dateClean,
             amount: parsedAmount,
             receiptPhoto: photoToUse,
             hasPhoto: photoPresent,
@@ -562,10 +570,10 @@ export function FormRendicion() {
       const newDoc: Comprobante = {
         id: safeUUID(),
         type,
-        documentNumber: documentNumber.trim(),
-        ruc: ruc.trim(),
-        razonSocial: razonSocial.trim(),
-        date,
+        documentNumber: docNumClean,
+        ruc: rucClean,
+        razonSocial: razonSocialClean,
+        date: dateClean,
         amount: parsedAmount,
         receiptPhoto: receiptPhoto || undefined,
         hasPhoto: !!receiptPhoto,
@@ -577,7 +585,7 @@ export function FormRendicion() {
     
     setComprobantes(updatedComprobantes);
     
-    // Reset Form State
+    // Reset Form State so user can immediately add another expense without form closing
     setEditingComprobanteId(null);
     setType('Factura');
     setDocumentNumber('');
@@ -585,7 +593,7 @@ export function FormRendicion() {
     setEmisorDocType('RUC');
     setRazonSocial('');
     setRucError('');
-    setDate('');
+    setDate(new Date().toISOString().split('T')[0]);
     setAmount('');
     setReceiptPhoto(undefined);
     setUploadedFileName(null);
@@ -593,7 +601,8 @@ export function FormRendicion() {
     setFileSuccessMsg(null);
     setCategory('Transporte');
     setObservation('');
-    setShowDocForm(false);
+    setItemAddedMsg(`¡Gasto de S/ ${parsedAmount.toFixed(2)} registrado con éxito! Puedes continuar agregando más gastos.`);
+    setShowDocForm(true);
 
     if (isEditing && id) {
       // Safe save in Firestore
@@ -606,7 +615,7 @@ export function FormRendicion() {
         const sumIngresos = ingresos.reduce((sum, ing) => sum + ing.amount, 0);
         const primaryDate = ingresos.length > 0 ? ingresos[0].date : (new Date().toISOString().split('T')[0]);
         
-        // Clear heavy base64 strings from local state IMMEDIATELY to prevent memory bloat and UI lag
+        // Clear heavy base64 strings from local state IMMEDIATELY to prevent memory bloat
         const clearedComprobantes = updatedComprobantes.map(c => ({
           ...c,
           receiptPhoto: undefined,
@@ -614,7 +623,6 @@ export function FormRendicion() {
         }));
         setComprobantes(clearedComprobantes);
 
-        // Use addRendicion store action! This separates photos and stores them correctly
         const newId = await addRendicion(
           blockName,
           sumIngresos,
@@ -628,7 +636,6 @@ export function FormRendicion() {
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus('idle'), 2000);
         
-        // Navigate and retain states
         setIsLoaded(true);
         navigate(`/edit/${newId}`, { replace: true });
       } catch (err) {
@@ -652,8 +659,9 @@ export function FormRendicion() {
   const handleEditIngreso = (ing: Ingreso) => {
     setEditingIngresoId(ing.id);
     setIngAmount(ing.amount.toString());
-    setIngDate(ing.date);
+    setIngDate(ing.date || new Date().toISOString().split('T')[0]);
     setIngReference(ing.reference || '');
+    setIngSuccessMsg(null);
     setShowIngForm(true);
   };
 
@@ -662,12 +670,20 @@ export function FormRendicion() {
     setIngAmount('');
     setIngDate(new Date().toISOString().split('T')[0]);
     setIngReference('');
+    setIngSuccessMsg(null);
     setShowIngForm(false);
   };
 
   const addOrUpdateIngreso = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ingAmount) return;
+    const parsedIngAmount = parseFloat(ingAmount) || 0;
+    if (parsedIngAmount <= 0) {
+      alert('Por favor, ingrese un monto de desembolso mayor a 0.');
+      return;
+    }
+
+    const refClean = ingReference.trim();
+    const dateClean = ingDate || new Date().toISOString().split('T')[0];
 
     let updatedIngresos: Ingreso[];
 
@@ -677,9 +693,9 @@ export function FormRendicion() {
         if (ing.id === editingIngresoId) {
           return {
             ...ing,
-            amount: parseFloat(ingAmount) || 0,
-            date: ingDate,
-            reference: ingReference.trim()
+            amount: parsedIngAmount,
+            date: dateClean,
+            reference: refClean
           };
         }
         return ing;
@@ -688,26 +704,27 @@ export function FormRendicion() {
       // Creating a new ingreso
       const newIng: Ingreso = {
         id: safeUUID(),
-        amount: parseFloat(ingAmount) || 0,
-        date: ingDate,
-        reference: ingReference.trim()
+        amount: parsedIngAmount,
+        date: dateClean,
+        reference: refClean
       };
       updatedIngresos = [...ingresos, newIng];
     }
 
     setIngresos(updatedIngresos);
 
-    // Reset Form State
+    // Reset Form State so user can immediately add another disbursement
     setEditingIngresoId(null);
     setIngAmount('');
     setIngDate(new Date().toISOString().split('T')[0]);
     setIngReference('');
-    setShowIngForm(false);
+    setIngSuccessMsg(`¡Desembolso de S/ ${parsedIngAmount.toFixed(2)} registrado con éxito! Puedes continuar agregando más desembolsos.`);
+    setShowIngForm(true);
 
     if (isEditing && id) {
       await autoSaveBlock(comprobantes, updatedIngresos, signature);
     } else {
-      // Transition seamlessly from /new to /edit/:newId to persist initial block with the new ingreso
+      // Transition seamlessly from /new to /edit/:newId
       setSaveStatus('saving');
       try {
         const blockName = name.trim() || 'Rendición Temporal';
@@ -1043,6 +1060,13 @@ export function FormRendicion() {
               {editingIngresoId ? <Edit3 className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
               {editingIngresoId ? 'Editar Desembolso' : 'Agregar Nuevo Desembolso'}
             </h4>
+
+            {ingSuccessMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-2 text-xs font-bold text-emerald-800">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{ingSuccessMsg}</span>
+              </div>
+            )}
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
@@ -1090,15 +1114,16 @@ export function FormRendicion() {
               <button 
                 type="button" 
                 onClick={handleCancelEditIngreso} 
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium"
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium cursor-pointer"
               >
-                Cancelar
+                {editingIngresoId ? 'Cancelar' : 'Cerrar Formulario'}
               </button>
               <button 
                 type="submit" 
-                className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center"
+                className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center cursor-pointer shadow-xs"
               >
-                {editingIngresoId ? 'Actualizar Ingreso' : 'Añadir Ingreso'}
+                <Plus className="w-4 h-4 mr-1.5" />
+                {editingIngresoId ? 'Actualizar Ingreso' : 'Guardar y Añadir Desembolso'}
               </button>
             </div>
           </form>
@@ -1106,8 +1131,11 @@ export function FormRendicion() {
           <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-center">
             <button 
               type="button" 
-              onClick={() => setShowIngForm(true)} 
-              className="px-4 py-2 text-sm font-semibold text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 rounded-lg transition-colors flex items-center shadow-sm"
+              onClick={() => {
+                setIngSuccessMsg(null);
+                setShowIngForm(true);
+              }} 
+              className="px-4 py-2 text-sm font-semibold text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 rounded-lg transition-colors flex items-center shadow-sm cursor-pointer"
             >
               <Plus className="w-4 h-4 mr-1" /> Registrar Ingreso / Desembolso
             </button>
@@ -1244,6 +1272,14 @@ export function FormRendicion() {
               {editingComprobanteId ? <Edit3 className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
               {editingComprobanteId ? 'Editar Comprobante' : 'Agregar Nuevo Comprobante'}
             </h4>
+
+            {itemAddedMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-2 text-xs font-bold text-emerald-800">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{itemAddedMsg}</span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Tipo de Documento</label>
@@ -1264,14 +1300,13 @@ export function FormRendicion() {
                   type="text" 
                   value={documentNumber} 
                   onChange={(e) => setDocumentNumber(e.target.value)} 
-                  placeholder="Ej. F001-000452"
+                  placeholder="Ej. F001-000452 o S/N"
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
-                  required 
                 />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1 flex justify-between items-center">
-                  <span>Documento del Emisor</span>
+                  <span>Documento del Emisor (Opcional)</span>
                   {loadingRuc && <span className="text-[10px] text-blue-600 animate-pulse font-medium">Buscando...</span>}
                   {rucError && <span className="text-[10px] text-red-500 font-medium">{rucError}</span>}
                 </label>
@@ -1334,7 +1369,6 @@ export function FormRendicion() {
                     }}
                     placeholder={emisorDocType === 'RUC' ? "Ej. 20131312955" : "Ej. 45678912"}
                     className="w-full pl-3 pr-16 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white" 
-                    required 
                   />
                   <button
                     type="button"
@@ -1347,14 +1381,13 @@ export function FormRendicion() {
                 </div>
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Razón Social (Nombre de la Empresa)</label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Razón Social (Nombre de la Empresa / Varios)</label>
                 <input 
                   type="text" 
                   value={razonSocial} 
                   onChange={(e) => setRazonSocial(e.target.value)} 
                   placeholder="Razón social autocompletada por SUNAT o ingresada manualmente"
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium" 
-                  required 
                 />
               </div>
               <div>
@@ -1554,22 +1587,20 @@ export function FormRendicion() {
             </div>
             
             <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
-              {comprobantes.length > 0 && (
-                <button 
-                  type="button" 
-                  onClick={handleCancelEditComprobante} 
-                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium cursor-pointer"
-                >
-                  Cancelar
-                </button>
-              )}
+              <button 
+                type="button" 
+                onClick={handleCancelEditComprobante} 
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium cursor-pointer"
+              >
+                {editingComprobanteId ? 'Cancelar' : 'Cerrar Formulario'}
+              </button>
 
               <button 
                 type="submit" 
                 className="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center shadow-xs cursor-pointer gap-2"
               >
-                <CheckCircle className="w-4 h-4" />
-                {editingComprobanteId ? 'Actualizar Comprobante' : 'Guardar y Añadir Comprobante'}
+                <Plus className="w-4 h-4" />
+                {editingComprobanteId ? 'Actualizar Comprobante' : 'Guardar y Añadir Gasto'}
               </button>
             </div>
           </form>
@@ -1577,8 +1608,11 @@ export function FormRendicion() {
           <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-center">
             <button 
               type="button" 
-              onClick={() => setShowDocForm(true)} 
-              className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors flex items-center shadow-sm"
+              onClick={() => {
+                setItemAddedMsg(null);
+                setShowDocForm(true);
+              }} 
+              className="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors flex items-center shadow-sm cursor-pointer"
             >
               <Plus className="w-4 h-4 mr-1" /> Registrar Gasto (Factura / Boleta / Otro)
             </button>
