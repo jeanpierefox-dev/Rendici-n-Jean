@@ -1,9 +1,53 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { Rendicion, AppSettings, AppNotification, User, Comprobante } from '../types';
 import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { safeUUID, recompressBase64Image } from './utils';
+
+const safeLocalStorage = {
+  getItem: (name: string): string | null => {
+    try {
+      return localStorage.getItem(name);
+    } catch (e) {
+      console.warn("Could not read from localStorage:", e);
+      return null;
+    }
+  },
+  setItem: (name: string, value: string): void => {
+    try {
+      localStorage.setItem(name, value);
+    } catch (err) {
+      console.warn("localStorage quota exceeded. Pruning heavy photo payloads and retrying...", err);
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed?.state?.rendiciones && Array.isArray(parsed.state.rendiciones)) {
+          parsed.state.rendiciones = parsed.state.rendiciones.map((r: any) => ({
+            ...r,
+            signature: undefined,
+            comprobantes: (r.comprobantes || []).map((c: any) => {
+              const { receiptPhoto, ...rest } = c;
+              return { ...rest, hasPhoto: !!c.receiptPhoto || c.hasPhoto };
+            })
+          }));
+        }
+        localStorage.setItem(name, JSON.stringify(parsed));
+      } catch (innerErr) {
+        console.error("Critical: Could not save to localStorage even after pruning photos:", innerErr);
+        try {
+          localStorage.removeItem(name);
+        } catch (_) {}
+      }
+    }
+  },
+  removeItem: (name: string): void => {
+    try {
+      localStorage.removeItem(name);
+    } catch (e) {
+      console.warn("Could not remove item from localStorage:", e);
+    }
+  }
+};
 
 const savedPhotoFingerprints = new Set<string>();
 
@@ -374,6 +418,24 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'jean-barsa-storage',
+      storage: createJSONStorage(() => safeLocalStorage),
+      partialize: (state) => ({
+        hasEnteredApp: state.hasEnteredApp,
+        settings: state.settings,
+        currentUser: state.currentUser,
+        notifications: (state.notifications || []).slice(0, 20),
+        rendiciones: (state.rendiciones || []).map((r) => ({
+          ...r,
+          signature: undefined,
+          comprobantes: (r.comprobantes || []).map((c) => {
+            const { receiptPhoto, ...rest } = c;
+            return {
+              ...rest,
+              hasPhoto: !!c.receiptPhoto || c.hasPhoto
+            };
+          })
+        }))
+      })
     }
   )
 );

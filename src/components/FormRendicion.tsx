@@ -269,8 +269,8 @@ export function FormRendicion() {
         if (file.type === 'application/pdf') {
           base64 = await fileToBase64(file);
         } else {
-          // Compress image to 1000x1300 at 0.65 quality for fast processing and clear text legibility in PDF reports
-          base64 = await compressImageToBase64(file, 1000, 1300, 0.65);
+          // Compress image to 900x1200 at 0.60 quality for clear text legibility in PDF reports with minimal memory usage
+          base64 = await compressImageToBase64(file, 900, 1200, 0.60);
         }
         base64 = formatPhotoDataUrl(base64);
         
