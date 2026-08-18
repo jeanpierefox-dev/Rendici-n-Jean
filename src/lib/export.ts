@@ -47,6 +47,30 @@ export const formatPhotoDataUrl = (rawPhoto: string): string => {
 
 const photoCache = new Map<string, string>();
 
+export const fetchPhotoForLiquidacion = async (rendicion: Rendicion): Promise<string | undefined> => {
+  if (rendicion.liquidacion?.voucherPhoto) {
+    return formatPhotoDataUrl(rendicion.liquidacion.voucherPhoto);
+  }
+  if (!rendicion.liquidacion?.hasVoucher && !rendicion.liquidacion?.voucherPhoto) {
+    return undefined;
+  }
+  const key = `liq_${rendicion.id}`.replace(/\//g, '_');
+  if (photoCache.has(key)) {
+    return photoCache.get(key);
+  }
+  try {
+    const photoDoc = await getDoc(firestoreDoc(db, 'receipt_photos', key));
+    if (photoDoc.exists() && photoDoc.data()?.photo) {
+      const formatted = formatPhotoDataUrl(photoDoc.data().photo);
+      photoCache.set(key, formatted);
+      return formatted;
+    }
+  } catch (err: any) {
+    console.warn(`Could not fetch liquidation photo for key ${key}:`, err?.message || err);
+  }
+  return undefined;
+};
+
 export const fetchPhotoForComprobante = async (c: any, rendicionId?: string): Promise<string | undefined> => {
   if (c.receiptPhoto) {
     const formatted = formatPhotoDataUrl(c.receiptPhoto);
@@ -116,17 +140,39 @@ export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSetting
   let totalGeneral = 0;
   let totalAdelanto = 0;
   let totalComprobantes = 0;
+  let totalDevuelto = 0;
+  let totalReembolsado = 0;
+  let saldoPendienteActivo = 0;
 
   updatedRendiciones.forEach(r => {
-    totalAdelanto += (r.advanceAmount || 0);
-    r.comprobantes.forEach(c => {
-      totalGeneral += c.amount;
-      totalComprobantes++;
-    });
+    const prevBal = r.previousBalance || 0;
+    let initial = 0;
+    let extra = 0;
+    if (r.ingresos && r.ingresos.length > 0) {
+      initial = r.ingresos[0]?.amount || 0;
+      if (r.ingresos.length > 1) {
+        extra = r.ingresos.slice(1).reduce((sum, i) => sum + (i.amount || 0), 0);
+      }
+    } else {
+      initial = r.advanceAmount || 0;
+    }
+    const rFondos = initial + extra + prevBal;
+    const rGastado = r.totalAmount || 0;
+    totalAdelanto += rFondos;
+    totalGeneral += rGastado;
+    totalComprobantes += (r.comprobantes?.length || 0);
+
+    if (r.liquidacion?.status === 'Liquidado') {
+      const liqMonto = r.liquidacion.monto || Math.abs(rGastado - rFondos);
+      if (r.liquidacion.type === 'Favor Empresa') totalDevuelto += liqMonto;
+      if (r.liquidacion.type === 'Favor Trabajador') totalReembolsado += liqMonto;
+    } else {
+      saldoPendienteActivo += (rGastado - rFondos);
+    }
   });
 
-  const saldoNeto = Math.abs(totalAdelanto - totalGeneral);
-  const esDevolucion = totalAdelanto >= totalGeneral;
+  const saldoNeto = Math.abs(saldoPendienteActivo);
+  const esDevolucion = saldoPendienteActivo <= 0;
 
   // Header Logo
   if (settings.companyLogo) {
@@ -152,21 +198,29 @@ export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSetting
   doc.setFillColor(239, 246, 255); // Light blue tint
   doc.setDrawColor(191, 219, 254);
   doc.setLineWidth(0.4);
-  doc.roundedRect(14, 49, pageWidth - 28, 26, 2, 2, 'FD');
+  doc.roundedRect(14, 49, pageWidth - 28, 27, 2, 2, 'FD');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(10.5);
   doc.setTextColor(30, 58, 138);
-  doc.text(`GASTO TOTAL CONSOLIDADO DEL MES / PERÍODO: S/ ${totalGeneral.toFixed(2)}`, 18, 56);
+  doc.text(`GASTO TOTAL SUSTENTADO: S/ ${totalGeneral.toFixed(2)}  |  TOTAL FONDOS: S/ ${totalAdelanto.toFixed(2)}`, 18, 55.5);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(55, 65, 81);
-  doc.text(`Bloques de Rendición: ${updatedRendiciones.length}  |  Total Comprobantes: ${totalComprobantes}  |  Adelanto Total Recibido: S/ ${totalAdelanto.toFixed(2)}`, 18, 63);
+  const summaryLiquidacionStr = (totalDevuelto > 0 || totalReembolsado > 0)
+    ? `Liquidaciones conciliadas: ${totalDevuelto > 0 ? `Devuelto S/ ${totalDevuelto.toFixed(2)} ` : ''}${totalReembolsado > 0 ? `Reembolsado S/ ${totalReembolsado.toFixed(2)}` : ''}`
+    : 'Sin liquidaciones previas';
+  doc.text(`Bloques: ${updatedRendiciones.length}  |  Docs: ${totalComprobantes}  |  ${summaryLiquidacionStr}`, 18, 62);
 
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(esDevolucion ? 22 : 180, esDevolucion ? 101 : 83, esDevolucion ? 52 : 9); // Emerald vs Amber
-  doc.text(`Saldo Consolidado: S/ ${saldoNeto.toFixed(2)} (${esDevolucion ? 'Saldo a Devolver a la Empresa' : 'Saldo a Reembolsar al Colaborador'})`, 18, 70);
+  if (saldoNeto === 0) {
+    doc.setTextColor(4, 120, 87); // Emerald
+    doc.text(`Saldo Consolidado Pendiente: S/ 0.00 (TODAS LAS CUENTAS LIQUIDADAS Y SALDADAS)`, 18, 69);
+  } else {
+    doc.setTextColor(esDevolucion ? 22 : 180, esDevolucion ? 101 : 83, esDevolucion ? 52 : 9); // Emerald vs Amber
+    doc.text(`Saldo Consolidado Pendiente: S/ ${saldoNeto.toFixed(2)} (${esDevolucion ? 'Saldo a Devolver a la Empresa' : 'Saldo a Reembolsar al Colaborador'})`, 18, 69);
+  }
 
   let currentY = 82;
 
@@ -174,6 +228,22 @@ export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSetting
   for (let bIdx = 0; bIdx < updatedRendiciones.length; bIdx++) {
     const r = updatedRendiciones[bIdx];
     const totalBloque = r.comprobantes.reduce((sum, c) => sum + c.amount, 0);
+
+    const prevBal = r.previousBalance || 0;
+    let initial = 0;
+    let extra = 0;
+    if (r.ingresos && r.ingresos.length > 0) {
+      initial = r.ingresos[0]?.amount || 0;
+      if (r.ingresos.length > 1) {
+        extra = r.ingresos.slice(1).reduce((sum, i) => sum + (i.amount || 0), 0);
+      }
+    } else {
+      initial = r.advanceAmount || 0;
+    }
+    const rFondos = initial + extra + prevBal;
+    const isLiquidado = r.liquidacion?.status === 'Liquidado';
+    const rawBalance = rFondos - totalBloque;
+    const effectiveBalance = isLiquidado ? 0 : rawBalance;
 
     // Check if enough vertical space exists on current page for block header + at least 3 table rows (~50mm)
     if (currentY + 50 > pageHeight - 15) {
@@ -202,10 +272,10 @@ export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSetting
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(55, 65, 81);
-    doc.text(`Tipo / Centro: ${r.rendicionType || (r as any).costCenter || 'General'}  |  Estado: ${(r.status || 'Pendiente').toUpperCase()}  |  Adelanto: S/ ${(r.advanceAmount || 0).toFixed(2)}`, 18, currentY + 4.2);
+    doc.text(`Tipo: ${r.rendicionType || 'Logístico'}  |  Estado: ${(r.status || 'Pendiente').toUpperCase()}  |  Fondos: S/ ${rFondos.toFixed(2)}`, 18, currentY + 4.2);
     
     doc.setFont('helvetica', 'bold');
-    doc.text(`Total Bloque: S/ ${totalBloque.toFixed(2)}`, pageWidth - 18, currentY + 4.2, { align: 'right' });
+    doc.text(`Gastado: S/ ${totalBloque.toFixed(2)}`, pageWidth - 18, currentY + 4.2, { align: 'right' });
 
     currentY += 6;
 
@@ -248,19 +318,28 @@ export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSetting
     // Block Subtotal Footer Bar
     doc.setFillColor(249, 250, 251);
     doc.setDrawColor(209, 213, 219);
-    doc.rect(14, currentY, pageWidth - 28, 6, 'FD');
+    doc.rect(14, currentY, pageWidth - 28, 6.5, 'FD');
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(31, 41, 55);
-    doc.text(`SUBTOTAL BLOQUE "${r.name}": S/ ${totalBloque.toFixed(2)}`, pageWidth - 18, currentY + 4.2, { align: 'right' });
+    doc.text(`SUBTOTAL GASTADO "${r.name}": S/ ${totalBloque.toFixed(2)}`, pageWidth - 18, currentY + 4.5, { align: 'right' });
 
-    const saldoBloque = Math.abs((r.advanceAmount || 0) - totalBloque);
-    const esDevolucionBloque = (r.advanceAmount || 0) >= totalBloque;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(75, 85, 99);
-    doc.text(`Saldo Bloque: S/ ${saldoBloque.toFixed(2)} (${esDevolucionBloque ? 'A devolver' : 'A reembolsar'})`, 18, currentY + 4.2);
+    if (isLiquidado) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(4, 120, 87); // Green
+      const liqMonto = r.liquidacion?.monto || Math.abs(rawBalance);
+      const liqTypeDesc = r.liquidacion?.type === 'Favor Empresa' ? 'Devuelto (Uñero)' : 'Reembolsado';
+      doc.text(`SALDO: S/ 0.00 (LIQUIDADO: S/ ${liqMonto.toFixed(2)} ${liqTypeDesc})`, 18, currentY + 4.5);
+    } else {
+      const saldoBloque = Math.abs(rawBalance);
+      const esDevolucionBloque = rawBalance >= 0;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(esDevolucionBloque ? 180 : 29, esDevolucionBloque ? 83 : 78, esDevolucionBloque ? 9 : 216);
+      doc.text(`Saldo Bloque: S/ ${saldoBloque.toFixed(2)} (${esDevolucionBloque ? 'A devolver' : 'A reembolsar'})`, 18, currentY + 4.5);
+    }
 
     currentY += 12; // Spacing before next block
   }
@@ -279,30 +358,82 @@ export const exportToPDF = async (rendiciones: Rendicion[], settings: AppSetting
 };
 
 export const exportToExcel = (rendiciones: Rendicion[], settings: AppSettings) => {
-  const data = rendiciones.flatMap(r => r.comprobantes.map(c => ({
-    'ID Bloque': r.id.substring(0, 8),
-    'Nombre Bloque': r.name,
-    'Usuario': r.userName,
-    'Tipo Documento': c.type,
-    'Número Documento': c.documentNumber,
-    'RUC': c.ruc,
-    'Razón Social': c.razonSocial || '',
-    'Categoría': c.category || 'Otros',
-    'Observación': c.observation || '',
-    'Fecha Documento': formatLocalDate(c.date),
-    'Monto (S/)': c.amount,
-    'Estado': r.status,
-    'Fecha Registro': format(new Date(r.createdAt), 'dd/MM/yyyy HH:mm', { locale: es })
-  })));
+  // Comprobantes Detailed Data
+  const comprobantesData = rendiciones.flatMap(r => {
+    const isLiquidado = r.liquidacion?.status === 'Liquidado';
+    const liqMonto = isLiquidado ? (r.liquidacion?.monto || 0) : 0;
+    const liqTipo = isLiquidado ? (r.liquidacion?.type === 'Favor Empresa' ? 'Devolución (Uñero)' : 'Reembolso') : 'Sin liquidar';
+    const liqRef = r.liquidacion?.voucherObs || '';
 
-  const worksheet = XLSX.utils.json_to_sheet(data);
+    return r.comprobantes.map(c => ({
+      'ID Bloque': r.id.substring(0, 8),
+      'Nombre Bloque': r.name,
+      'Usuario': r.userName,
+      'Tipo Documento': c.type,
+      'Número Documento': c.documentNumber,
+      'RUC': c.ruc,
+      'Razón Social': c.razonSocial || '',
+      'Categoría': c.category || 'Otros',
+      'Observación': c.observation || '',
+      'Fecha Documento': formatLocalDate(c.date),
+      'Monto Gasto (S/)': c.amount,
+      'Estado Rendición': r.status,
+      'Estado Liquidación': isLiquidado ? 'Liquidado (Saldo 0.00)' : 'Pendiente',
+      'Monto Liquidado': liqMonto > 0 ? liqMonto : '',
+      'Tipo Liquidación': isLiquidado ? liqTipo : '',
+      'N° Voucher / Uñero': liqRef,
+      'Fecha Registro': format(new Date(r.createdAt), 'dd/MM/yyyy HH:mm', { locale: es })
+    }));
+  });
+
+  // Summary by Block Data
+  const resumenBloquesData = rendiciones.map(r => {
+    const prevBal = r.previousBalance || 0;
+    let initial = 0;
+    let extra = 0;
+    if (r.ingresos && r.ingresos.length > 0) {
+      initial = r.ingresos[0]?.amount || 0;
+      if (r.ingresos.length > 1) {
+        extra = r.ingresos.slice(1).reduce((sum, i) => sum + (i.amount || 0), 0);
+      }
+    } else {
+      initial = r.advanceAmount || 0;
+    }
+    const totalFondos = initial + extra + prevBal;
+    const totalGastado = r.totalAmount || 0;
+    const rawBalance = totalFondos - totalGastado;
+    const isLiquidado = r.liquidacion?.status === 'Liquidado';
+    const saldoFinal = isLiquidado ? 0 : rawBalance;
+
+    return {
+      'ID Bloque': r.id.substring(0, 8),
+      'Nombre Bloque': r.name,
+      'Colaborador': r.userName,
+      'Tipo Rendición': r.rendicionType || 'Logístico',
+      'Total Fondos Recibidos (S/)': totalFondos,
+      'Total Gastos Sustentados (S/)': totalGastado,
+      'Diferencia Inicial (S/)': rawBalance,
+      'Estado Liquidación': isLiquidado ? 'Liquidado' : 'Pendiente',
+      'Monto Devuelto / Reembolsado (S/)': isLiquidado ? (r.liquidacion?.monto || Math.abs(rawBalance)) : 0,
+      'Modalidad Liquidación': isLiquidado ? (r.liquidacion?.type === 'Favor Empresa' ? 'Devolución Excedente (Uñero)' : 'Reembolso Trabajador') : '-',
+      'N° Voucher / Ref': r.liquidacion?.voucherObs || '-',
+      'Fecha Liquidación': r.liquidacion?.fecha ? formatLocalDate(r.liquidacion.fecha) : '-',
+      'Saldo Pendiente Final (S/)': saldoFinal,
+      'Estado Bloque': r.status,
+      'Fecha Creación': format(new Date(r.createdAt), 'dd/MM/yyyy HH:mm', { locale: es })
+    };
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(comprobantesData);
+  const resumenWorksheet = XLSX.utils.json_to_sheet(resumenBloquesData);
   const workbook = XLSX.utils.book_new();
   
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Rendiciones");
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Comprobantes_Detalle");
+  XLSX.utils.book_append_sheet(workbook, resumenWorksheet, "Resumen_Bloques");
   
   const wscols = [
     {wch: 10}, // ID Bloque
-    {wch: 20}, // Nombre Bloque
+    {wch: 22}, // Nombre Bloque
     {wch: 20}, // Usuario
     {wch: 15}, // Tipo
     {wch: 20}, // Num
@@ -311,8 +442,12 @@ export const exportToExcel = (rendiciones: Rendicion[], settings: AppSettings) =
     {wch: 18}, // Categoría
     {wch: 25}, // Observación
     {wch: 15}, // Fecha
-    {wch: 12}, // Monto
+    {wch: 15}, // Monto Gasto
     {wch: 15}, // Estado
+    {wch: 22}, // Estado Liquidación
+    {wch: 16}, // Monto Liquidado
+    {wch: 20}, // Tipo Liquidación
+    {wch: 20}, // N° Voucher
     {wch: 20}, // Registro
   ];
   worksheet['!cols'] = wscols;
@@ -398,11 +533,14 @@ const ensureCanvasDataUrl = (base64Str: string): Promise<{ dataUrl: string; form
 };
 
 export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settings: AppSettings, conHojaFedatada: boolean = false) => {
-  // Pre-load any missing receipt photos from Firestore 'receipt_photos' collection in parallel
-  const updatedComprobantes = await Promise.all(storeRendicion.comprobantes.map(async (c) => {
-    const photo = await fetchPhotoForComprobante(c, storeRendicion.id);
-    return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
-  }));
+  // Pre-load any missing receipt photos and liquidation photos in parallel
+  const [updatedComprobantes, liquidationPhoto] = await Promise.all([
+    Promise.all(storeRendicion.comprobantes.map(async (c) => {
+      const photo = await fetchPhotoForComprobante(c, storeRendicion.id);
+      return { ...c, receiptPhoto: photo, hasPhoto: !!photo || c.hasPhoto };
+    })),
+    fetchPhotoForLiquidacion(storeRendicion)
+  ]);
 
   // Update store ONCE in one single batch!
   const hasNewPhotos = updatedComprobantes.some((c, i) => c.receiptPhoto !== storeRendicion.comprobantes[i].receiptPhoto);
@@ -433,7 +571,11 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   // Create a safe copy of the rendicion object to avoid mutating frozen store objects
   const rendicion: Rendicion = {
     ...storeRendicion,
-    comprobantes: processedComprobantes
+    comprobantes: processedComprobantes,
+    liquidacion: storeRendicion.liquidacion ? {
+      ...storeRendicion.liquidacion,
+      voucherPhoto: liquidationPhoto || storeRendicion.liquidacion.voucherPhoto
+    } : undefined
   };
 
   const doc = new jsPDF('p', 'mm', 'a4');
@@ -480,7 +622,10 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   }
       
   const totalRecibido = ingresosList.reduce((sum, ing) => sum + ing.amount, 0);
-  const balance = totalRecibido - totalGastado;
+  const rawBalance = totalRecibido - totalGastado;
+  const isLiquidado = rendicion.liquidacion?.status === 'Liquidado';
+  const effectiveBalance = isLiquidado ? 0 : rawBalance;
+
   const fechaEmision = format(new Date(), 'dd/MM/yyyy HH:mm');
   const fechaRendicion = format(new Date(rendicion.createdAt), 'dd/MM/yyyy');
 
@@ -614,17 +759,26 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   doc.text(`S/ ${totalRecibido.toFixed(2)}`, 20, 103);
   doc.text(`S/ ${totalGastado.toFixed(2)}`, 75, 103);
 
-  // Style Balance based on positive/negative
-  if (balance > 0) {
+  // Style Balance based on positive/negative or liquidated status
+  if (isLiquidado) {
+    const liq = rendicion.liquidacion!;
+    const liqMonto = liq.monto || Math.abs(rawBalance);
+    const liqTypeStr = liq.type === 'Favor Empresa' ? 'DEVUELTO' : 'REEMBOLSADO';
+    doc.setTextColor(4, 120, 87); // Emerald Green
+    doc.setFont('helvetica', 'bold');
+    doc.text('S/ 0.00', 135, 103);
+    doc.setFontSize(6.5);
+    doc.text(`(LIQUIDADO: S/ ${liqMonto.toFixed(2)} ${liqTypeStr})`, 135, 106);
+  } else if (rawBalance > 0) {
     doc.setTextColor(180, 83, 9); // Amber
     doc.setFont('helvetica', 'bold');
-    doc.text(`S/ ${Math.abs(balance).toFixed(2)}`, 135, 103);
+    doc.text(`S/ ${Math.abs(rawBalance).toFixed(2)}`, 135, 103);
     doc.setFontSize(7);
     doc.text('(A DEVOLVER A LA EMPRESA)', 135, 106);
-  } else if (balance < 0) {
+  } else if (rawBalance < 0) {
     doc.setTextColor(29, 78, 216); // Blue
     doc.setFont('helvetica', 'bold');
-    doc.text(`S/ ${Math.abs(balance).toFixed(2)}`, 135, 103);
+    doc.text(`S/ ${Math.abs(rawBalance).toFixed(2)}`, 135, 103);
     doc.setFontSize(7);
     doc.text('(A REEMBOLSAR AL COLABORADOR)', 135, 106);
   } else {
@@ -706,41 +860,51 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
 
   // LIQUIDATION / CONCILIATION DETAILS BOX
   if (rendicion.liquidacion) {
-    if (finalY > 210) {
+    if (finalY > 200) {
       doc.addPage();
       finalY = 20;
     }
 
     const liq = rendicion.liquidacion;
+    const isLiqSaldado = liq.status === 'Liquidado';
+    
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(30, 58, 138);
-    doc.text('ESTADO DE LIQUIDACIÓN Y CONCILIACIÓN FINAL', 14, finalY);
+    doc.setFontSize(9.5);
+    doc.setTextColor(isLiqSaldado ? 4 : 30, isLiqSaldado ? 120 : 58, isLiqSaldado ? 87 : 138);
+    doc.text(isLiqSaldado ? 'ESTADO DE LIQUIDACIÓN: CONCILIADO Y SALDADO A S/ 0.00' : 'ESTADO DE CONCILIACIÓN / TRASPASO', 14, finalY);
 
-    doc.setFillColor(243, 244, 246);
-    doc.setDrawColor(209, 213, 219);
-    doc.rect(14, finalY + 3, pageWidth - 28, 22, 'FD');
+    doc.setFillColor(isLiqSaldado ? 236 : 243, isLiqSaldado ? 253 : 244, isLiqSaldado ? 245 : 246);
+    doc.setDrawColor(isLiqSaldado ? 167 : 209, isLiqSaldado ? 243 : 213, isLiqSaldado ? 208 : 219);
+    doc.rect(14, finalY + 3, pageWidth - 28, 25, 'FD');
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(31, 41, 55);
 
-    const liqStatusStr = liq.status === 'Liquidado' ? 'LIQUIDADO A S/ 0.00' : 'TRASPASADO A OTRA RENDICIÓN';
+    const liqStatusStr = isLiqSaldado ? 'CONCILIADO / SALDADO (SALDO EN S/ 0.00)' : 'TRASPASADO A OTRA RENDICIÓN';
     const liqTypeStr = liq.type === 'Favor Empresa' 
-      ? 'Devolución de excedente a Empresa (Uñero)' 
-      : 'Reembolso pagado al Trabajador (Voucher)';
+      ? 'Devolución de excedente a Empresa (Uñero / Recibo)' 
+      : 'Reembolso pagado al Trabajador (Voucher / Abono)';
+    const liqMonto = liq.monto || Math.abs(rawBalance);
 
-    doc.text(`Estado Final: ${liqStatusStr}`, 18, finalY + 8);
-    doc.text(`Modalidad: ${liqTypeStr}`, 18, finalY + 13);
-    doc.text(`N° Ref / Obs: ${liq.voucherObs || 'N/A'}`, 18, finalY + 18);
+    doc.text(`Estado Final: ${liqStatusStr}`, 18, finalY + 8.5);
+    doc.text(`Modalidad: ${liqTypeStr}`, 18, finalY + 13.5);
+    doc.text(`N° Ref / Voucher / Glosa: ${liq.voucherObs || 'N/A'}`, 18, finalY + 18.5);
+    doc.text(`Constancia Digital: ${liq.voucherPhoto || liq.hasVoucher ? 'Adjunta en Archivo' : 'Registrado en Físico'}`, 18, finalY + 23.5);
 
-    doc.text(`Monto Conciliado: S/ ${(liq.monto || 0).toFixed(2)}`, 110, finalY + 8);
-    doc.text(`Fecha Liquidación: ${liq.fecha ? format(new Date(liq.fecha + 'T00:00:00'), 'dd/MM/yyyy') : 'N/A'}`, 110, finalY + 13);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(isLiqSaldado ? 4 : 31, isLiqSaldado ? 120 : 41, isLiqSaldado ? 87 : 55);
+    doc.text(`Monto Liquidado: S/ ${liqMonto.toFixed(2)}`, 115, finalY + 8.5);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(75, 85, 99);
+    doc.text(`Saldo Final Bloque: S/ 0.00`, 115, finalY + 13.5);
+    doc.text(`Fecha Liquidación: ${liq.fecha ? format(new Date(liq.fecha + 'T00:00:00'), 'dd/MM/yyyy') : 'N/A'}`, 115, finalY + 18.5);
     if (liq.carriedOverToName) {
-      doc.text(`Destino Traspaso: ${liq.carriedOverToName}`, 110, finalY + 18);
+      doc.text(`Destino Traspaso: ${liq.carriedOverToName}`, 115, finalY + 23.5);
     }
 
-    finalY += 30;
+    finalY += 33;
   }
 
   // Prevent overlap if signature goes off page
@@ -825,7 +989,6 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
       doc.line(12, 34, pageWidth - 12, 34);
 
       // --- LEFT SIDE: PHYSICAL RECEIPT PASTING BOX ---
-      // Width for pasting: 76 mm, Height: 240 mm
       const boxX = 12;
       const boxY = 38;
       const boxW = 74;
@@ -867,13 +1030,11 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
       doc.text('Ancho máx: 70 mm', boxCenterX, boxCenterY + 45, { align: 'center' });
 
       // --- RIGHT SIDE: COMPLETE ATTACHED DIGITAL IMAGE ---
-      // Expanded width for image: 108 mm, Height: 242 mm for optimal legibility
       const imgMaxW = 108;
       const imgMaxH = 242;
       const imgColX = 90;
       const imgColY = 38;
 
-      // Add receipt photo image centered in the space
       let photoSrc = (c as any).processedPhoto || c.receiptPhoto;
       if (photoSrc && !photoSrc.startsWith('data:')) {
         photoSrc = 'data:image/jpeg;base64,' + photoSrc;
@@ -917,7 +1078,6 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
               }
             }
 
-            // Safe fallback aspect ratio (800x1000 = 0.8) to prevent stretching if unmeasured
             if (!origW || !origH) {
               origW = 800;
               origH = 1000;
@@ -938,7 +1098,6 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
             }
 
             const imgX = imgColX + (imgMaxW - finalW) / 2;
-            // Position near the top of column with slight padding so receipt is prominent
             const imgY = imgColY + Math.min(8, Math.max(0, (imgMaxH - finalH) / 2));
             
             let pSrc = (c as any).processedPhoto || photoSrc;
@@ -976,6 +1135,109 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
         doc.setTextColor(156, 163, 175);
         doc.text("Sin copia digital adjunta", imgColX + (imgMaxW / 2), imgColY + 48, { align: 'center' });
         doc.text("(Utilice el recuadro izquierdo para pegar el físico)", imgColX + (imgMaxW / 2), imgColY + 54, { align: 'center' });
+      }
+    }
+
+    // If block is liquidated AND has liquidation voucher/constancia, append final liquidation voucher annex!
+    if (rendicion.liquidacion?.voucherPhoto || rendicion.liquidacion?.hasVoucher) {
+      const liq = rendicion.liquidacion;
+      doc.addPage();
+      
+      doc.setDrawColor(4, 120, 87); // Emerald frame for liquidation
+      doc.setLineWidth(0.6);
+      doc.rect(8, 8, pageWidth - 16, doc.internal.pageSize.getHeight() - 16);
+      
+      doc.setDrawColor(167, 243, 208);
+      doc.setLineWidth(0.3);
+      doc.rect(10, 10, pageWidth - 20, doc.internal.pageSize.getHeight() - 20);
+      
+      // Header for Liquidation Annex
+      doc.setFillColor(236, 253, 245);
+      doc.rect(12, 12, pageWidth - 24, 24, 'F');
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(4, 120, 87);
+      doc.text(`HOJA FEDATADA - CONSTANCIA DE LIQUIDACIÓN Y CIERRE`, 16, 20);
+      
+      doc.setFontSize(7.5);
+      doc.setTextColor(55, 65, 81);
+      doc.text(`Bloque: ${rendicion.name} | Colaborador: ${rendicion.userName} | Saldo: S/ 0.00`, 16, 26);
+      doc.text(`Fecha Liquidación: ${liq.fecha ? format(new Date(liq.fecha + 'T00:00:00'), 'dd/MM/yyyy') : 'N/A'} | Ref: ${liq.voucherObs || 'N/A'}`, 16, 32);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(4, 120, 87);
+      const liqMonto = liq.monto || Math.abs(rawBalance);
+      doc.text(`${liq.type === 'Favor Empresa' ? 'DEVOLUCIÓN A EMPRESA (UÑERO)' : 'REEMBOLSO A TRABAJADOR'}`, pageWidth - 16, 20, { align: 'right' });
+      doc.text(`Monto: S/ ${liqMonto.toFixed(2)}`, pageWidth - 16, 27, { align: 'right' });
+
+      doc.setDrawColor(167, 243, 208);
+      doc.line(12, 38, pageWidth - 12, 38);
+
+      // Left side: Physical voucher paste box
+      const boxX = 12;
+      const boxY = 42;
+      const boxW = 74;
+      const boxH = 238;
+
+      doc.setDrawColor(156, 163, 175);
+      doc.setLineWidth(0.3);
+      doc.setLineDashPattern([2, 2], 0);
+      doc.setFillColor(253, 253, 253);
+      doc.rect(boxX, boxY, boxW, boxH, 'FD');
+      doc.setLineDashPattern([], 0);
+
+      const boxCenterX = boxX + (boxW / 2);
+      const boxCenterY = boxY + (boxH / 2);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(156, 163, 175);
+      doc.text('PEGAR CONSTANCIA / UÑERO /', boxCenterX, boxCenterY - 15, { align: 'center' });
+      doc.text('VOUCHER ORIGINAL AQUÍ', boxCenterX, boxCenterY - 9, { align: 'center' });
+
+      doc.setLineWidth(0.3);
+      doc.setDrawColor(209, 213, 219);
+      doc.setLineDashPattern([1, 1], 0);
+      doc.rect(boxCenterX - 16, boxCenterY + 4, 32, 22);
+      doc.setLineDashPattern([], 0);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(156, 163, 175);
+      doc.text('Constancia de Cierre', boxCenterX, boxCenterY + 16, { align: 'center' });
+
+      // Right side: Attached digital liquidation image
+      const imgMaxW = 108;
+      const imgMaxH = 238;
+      const imgColX = 90;
+      const imgColY = 42;
+
+      let liqPhoto = liq.voucherPhoto;
+      if (liqPhoto) {
+        liqPhoto = formatPhotoDataUrl(liqPhoto);
+        try {
+          doc.addImage(liqPhoto, 'JPEG', imgColX, imgColY, imgMaxW, Math.min(imgMaxH, 180), undefined, 'FAST');
+          doc.setDrawColor(167, 243, 208);
+          doc.setLineWidth(0.4);
+          doc.rect(imgColX, imgColY, imgMaxW, Math.min(imgMaxH, 180));
+        } catch (e) {
+          console.warn("Could not add liquidation voucher image to PDF", e);
+        }
+      } else {
+        doc.setFillColor(249, 250, 251);
+        doc.rect(imgColX, imgColY, imgMaxW, 100, 'F');
+        doc.setDrawColor(229, 231, 235);
+        doc.rect(imgColX, imgColY, imgMaxW, 100);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(107, 114, 128);
+        doc.text("CONSTANCIA DE LIQUIDACIÓN SALDADA", imgColX + (imgMaxW / 2), imgColY + 45, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.text("Liquidación registrada en el sistema a S/ 0.00", imgColX + (imgMaxW / 2), imgColY + 53, { align: 'center' });
       }
     }
   }
@@ -1439,12 +1701,22 @@ export const exportTicketPDF = async (rendicion: Rendicion, settings: AppSetting
   y += 14.5;
 
   // Box 3: Liquidación Resultante
+  const isLiquidado = rendicion.liquidacion?.status === 'Liquidado';
   let box3Bg = [239, 246, 255];
   let box3Border = [191, 219, 254];
   let box3Text = [29, 78, 216];
   let resultLabel = '🔵 SALDO EQUILIBRADO';
+  let finalBalanceDisplay = Math.abs(balance).toFixed(2);
 
-  if (balance > 0) {
+  if (isLiquidado) {
+    box3Bg = [236, 253, 245];
+    box3Border = [167, 243, 208];
+    box3Text = [4, 120, 87];
+    const liqMonto = rendicion.liquidacion?.monto || Math.abs(balance);
+    const liqType = rendicion.liquidacion?.type === 'Favor Empresa' ? 'Devuelto (Uñero)' : 'Reembolsado';
+    resultLabel = `✅ LIQUIDADO: S/ ${liqMonto.toFixed(2)} ${liqType}`;
+    finalBalanceDisplay = "0.00";
+  } else if (balance > 0) {
     box3Bg = [254, 242, 242];
     box3Border = [254, 202, 202];
     box3Text = [190, 18, 60];
@@ -1463,10 +1735,10 @@ export const exportTicketPDF = async (rendicion: Rendicion, settings: AppSetting
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(box3Text[0], box3Text[1], box3Text[2]);
-  doc.text('3. RESULTADO LIQUIDACIÓN', margin + 2.5, y + 4.5);
+  doc.text(isLiquidado ? '3. RESULTADO (LIQUIDADO A S/ 0.00)' : '3. RESULTADO LIQUIDACIÓN', margin + 2.5, y + 4.5);
 
   doc.setFontSize(11);
-  doc.text(`S/ ${Math.abs(balance).toFixed(2)}`, pageWidth - margin - 2.5, y + 7, { align: 'right' });
+  doc.text(`S/ ${finalBalanceDisplay}`, pageWidth - margin - 2.5, y + 7, { align: 'right' });
 
   doc.setFontSize(6.5);
   doc.text(resultLabel, margin + 2.5, y + 10.5);

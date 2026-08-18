@@ -43,22 +43,32 @@ export const generateSingleRendicionWhatsAppMessage = (
   const companyName = settings?.companyName || 'Empresa';
   const { totalFondos, initialAdvance, additionalIngresos, previousBalance } = getRendicionTotalFondos(rendicion);
   const totalGastado = rendicion.totalAmount || 0;
-  const balance = totalGastado - totalFondos; // > 0 favor trabajador, < 0 favor empresa
+  const rawBalance = totalGastado - totalFondos; // > 0 favor trabajador, < 0 favor empresa
+  const isLiquidado = rendicion.liquidacion?.status === 'Liquidado';
 
   const dateFormatted = rendicion.createdAt 
     ? format(parseISO(rendicion.createdAt), 'dd/MM/yyyy') 
     : format(new Date(), 'dd/MM/yyyy');
 
   let balanceHeadline = '';
-  if (balance > 0) {
-    balanceHeadline = `🔴 *LIQUIDACIÓN:* *S/ ${balance.toFixed(2)} A FAVOR DEL TRABAJADOR* (Reembolso)`;
-  } else if (balance < 0) {
-    balanceHeadline = `🟢 *LIQUIDACIÓN:* *S/ ${Math.abs(balance).toFixed(2)} A DEVOLVER A EMPRESA*`;
+  if (isLiquidado) {
+    const liq = rendicion.liquidacion!;
+    const liqMonto = liq.monto || Math.abs(rawBalance);
+    const liqTypeStr = liq.type === 'Favor Empresa' ? 'Devuelto a Empresa (Uñero / Recibo)' : 'Reembolsado al Trabajador (Voucher / Abono)';
+    balanceHeadline = `✅ *LIQUIDACIÓN: SALDO EN S/ 0.00 (BLOQUE SALDADO)*\n`;
+    balanceHeadline += `▫️ *Monto Conciliado:* S/ ${liqMonto.toFixed(2)} (${liqTypeStr})\n`;
+    balanceHeadline += `▫️ *N° Operación / Ref:* ${liq.voucherObs || 'N/A'}\n`;
+    balanceHeadline += `▫️ *Fecha Liquidación:* ${liq.fecha ? format(parseISO(liq.fecha), 'dd/MM/yyyy') : dateFormatted}\n`;
+    balanceHeadline += `▫️ *Saldo Pendiente Final:* *S/ 0.00*`;
+  } else if (rawBalance > 0) {
+    balanceHeadline = `🔴 *LIQUIDACIÓN PENDIENTE:* *S/ ${rawBalance.toFixed(2)} A FAVOR DEL TRABAJADOR* (Reembolso)`;
+  } else if (rawBalance < 0) {
+    balanceHeadline = `🟢 *LIQUIDACIÓN PENDIENTE:* *S/ ${Math.abs(rawBalance).toFixed(2)} A DEVOLVER A EMPRESA*`;
   } else {
     balanceHeadline = `🔵 *LIQUIDACIÓN:* *S/ 0.00 (Saldo Equilibrado)*`;
   }
 
-  let statusEmoji = '⏳';
+  let statusEmoji = isLiquidado ? '✅' : '⏳';
   if (rendicion.status === 'Aprobado') statusEmoji = '✅';
   if (rendicion.status === 'Rechazado') statusEmoji = '❌';
 
@@ -68,7 +78,7 @@ export const generateSingleRendicionWhatsAppMessage = (
   msg += `👤 *Responsable:* ${rendicion.userName}\n`;
   msg += `🏷️ *Tipo Rendición:* ${rendicion.rendicionType || 'Logístico'}\n`;
   msg += `📅 *Fecha Registro:* ${dateFormatted}\n`;
-  msg += `📌 *Estado:* ${statusEmoji} *${rendicion.status.toUpperCase()}*\n\n`;
+  msg += `📌 *Estado:* ${statusEmoji} *${isLiquidado ? 'LIQUIDADO A S/ 0.00' : rendicion.status.toUpperCase()}*\n\n`;
 
   msg += `💰 *RESUMEN FINANCIERO*\n`;
   msg += `──────────────────────────\n`;
@@ -100,7 +110,7 @@ export const generateSingleRendicionWhatsAppMessage = (
   }
 
   msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `✅ _Ticket de gastos verificado y registrado digitalmente._`;
+  msg += `✅ _Ticket de gastos y liquidación verificado digitalmente._`;
 
   return msg;
 };
@@ -118,23 +128,40 @@ export const generateGeneralSummaryWhatsAppMessage = (
   let totalFondos = 0;
   let totalGastado = 0;
   let totalDocs = 0;
+  let totalDevuelto = 0;
+  let totalReembolsado = 0;
+  let saldoPendienteActivo = 0;
 
   rendiciones.forEach(r => {
     const { totalFondos: rFondos } = getRendicionTotalFondos(r);
+    const rGastado = r.totalAmount || 0;
     totalFondos += rFondos;
-    totalGastado += (r.totalAmount || 0);
+    totalGastado += rGastado;
     totalDocs += (r.comprobantes?.length || 0);
+
+    if (r.liquidacion?.status === 'Liquidado') {
+      const liqMonto = r.liquidacion.monto || Math.abs(rGastado - rFondos);
+      if (r.liquidacion.type === 'Favor Empresa') totalDevuelto += liqMonto;
+      if (r.liquidacion.type === 'Favor Trabajador') totalReembolsado += liqMonto;
+    } else {
+      saldoPendienteActivo += (rGastado - rFondos);
+    }
   });
 
-  const netBalance = totalGastado - totalFondos;
+  const netBalance = saldoPendienteActivo;
 
   let balanceHeadline = '';
-  if (netBalance > 0) {
-    balanceHeadline = `🔴 *RESULTADO GLOBAL:* *S/ ${netBalance.toFixed(2)} A FAVOR DEL TRABAJADOR*`;
-  } else if (netBalance < 0) {
-    balanceHeadline = `🟢 *RESULTADO GLOBAL:* *S/ ${Math.abs(netBalance).toFixed(2)} A DEVOLVER A EMPRESA*`;
+  if (totalDevuelto > 0 || totalReembolsado > 0) {
+    balanceHeadline += `▫️ Liquidado Devoluciones (Empresa): *S/ ${totalDevuelto.toFixed(2)}*\n`;
+    balanceHeadline += `▫️ Liquidado Reembolsos (Colaborador): *S/ ${totalReembolsado.toFixed(2)}*\n`;
+  }
+
+  if (Math.abs(netBalance) < 0.01) {
+    balanceHeadline += `✅ *SALDO GLOBAL PENDIENTE:* *S/ 0.00 (TODOS LOS BLOQUES LIQUIDADOS)*`;
+  } else if (netBalance > 0) {
+    balanceHeadline += `🔴 *SALDO PENDIENTE:* *S/ ${netBalance.toFixed(2)} A FAVOR DEL TRABAJADOR*`;
   } else {
-    balanceHeadline = `🔵 *RESULTADO GLOBAL:* *S/ 0.00 (Cuentas Saldadas)*`;
+    balanceHeadline += `🟢 *SALDO PENDIENTE:* *S/ ${Math.abs(netBalance).toFixed(2)} A DEVOLVER A EMPRESA*`;
   }
 
   const headerTitle = monthTitle 
@@ -159,20 +186,31 @@ export const generateGeneralSummaryWhatsAppMessage = (
   msg += `──────────────────────────\n`;
 
   rendiciones.forEach((r, idx) => {
-    const statusEmoji = r.status === 'Aprobado' ? '✅' : r.status === 'Rechazado' ? '❌' : '⏳';
+    const isLiquidado = r.liquidacion?.status === 'Liquidado';
+    const statusEmoji = isLiquidado ? '✅' : r.status === 'Aprobado' ? '✅' : r.status === 'Rechazado' ? '❌' : '⏳';
     const { totalFondos: rFondos } = getRendicionTotalFondos(r);
-    const rBalance = r.totalAmount - rFondos;
+    const rGastado = r.totalAmount || 0;
+    const rBalance = rGastado - rFondos;
+    
     let rBalStr = '';
-    if (rBalance > 0) rBalStr = `(🔴 +S/ ${rBalance.toFixed(2)} Fav. Trab)`;
-    else if (rBalance < 0) rBalStr = `(🟢 -S/ ${Math.abs(rBalance).toFixed(2)} Dev. Emp)`;
-    else rBalStr = `(🔵 S/ 0.00)`;
+    if (isLiquidado) {
+      const liqMonto = r.liquidacion?.monto || Math.abs(rBalance);
+      const liqType = r.liquidacion?.type === 'Favor Empresa' ? 'Devuelto' : 'Reembolsado';
+      rBalStr = `(✅ Saldado S/ 0.00 | Liq: S/ ${liqMonto.toFixed(2)} ${liqType})`;
+    } else if (rBalance > 0) {
+      rBalStr = `(🔴 +S/ ${rBalance.toFixed(2)} Fav. Trab)`;
+    } else if (rBalance < 0) {
+      rBalStr = `(🟢 -S/ ${Math.abs(rBalance).toFixed(2)} Dev. Emp)`;
+    } else {
+      rBalStr = `(🔵 S/ 0.00)`;
+    }
 
-    msg += `${idx + 1}. *${r.name}* [${statusEmoji} ${r.status.toUpperCase()}]\n`;
-    msg += `   • Gastado: *S/ ${r.totalAmount.toFixed(2)}* de *S/ ${rFondos.toFixed(2)}* ${rBalStr}\n`;
+    msg += `${idx + 1}. *${r.name}* [${statusEmoji} ${isLiquidado ? 'LIQUIDADO' : r.status.toUpperCase()}]\n`;
+    msg += `   • Gastado: *S/ ${rGastado.toFixed(2)}* de *S/ ${rFondos.toFixed(2)}* ${rBalStr}\n`;
   });
 
   msg += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `✅ _Reporte oficial de liquidación generado por la plataforma._`;
+  msg += `✅ _Reporte oficial de liquidación generado por Jean-Barsa Rendiciones._`;
 
   return msg;
 };
