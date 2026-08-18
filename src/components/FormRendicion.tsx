@@ -843,12 +843,21 @@ export function FormRendicion() {
   const grandTotalIngresos = totalIngresos + previousBalance;
   const balance = grandTotalIngresos - totalGastado;
   
-  const balanceText = balance > 0 
+  const existingRendicion = isEditing && id ? rendiciones.find(r => r.id === id) : undefined;
+  const isLiquidado = existingRendicion?.liquidacion?.status === 'Liquidado';
+  const displayBalance = isLiquidado ? 0 : balance;
+
+  const balanceText = isLiquidado
+    ? (existingRendicion?.liquidacion?.type === 'Favor Empresa' ? 'Liquidado (Devuelto a Empresa)' : 'Liquidado (Reembolsado)')
+    : balance > 0 
     ? 'A favor de la empresa (Devolver)' 
     : balance < 0 
       ? 'A favor del empleado (Reembolsar)' 
       : 'Sin saldo pendiente';
-  const balanceClass = balance > 0 
+
+  const balanceClass = isLiquidado
+    ? 'text-emerald-800 bg-emerald-50 border-emerald-300'
+    : balance > 0 
     ? 'text-amber-700 bg-amber-50 border-amber-200' 
     : balance < 0 
       ? 'text-blue-700 bg-blue-50 border-blue-200' 
@@ -1160,7 +1169,7 @@ export function FormRendicion() {
             </div>
             {totalIngresos > 0 && (
               <div className={`text-xs font-bold px-3 py-1.5 rounded-md border text-center ${balanceClass}`}>
-                Saldo: S/ {Math.abs(balance).toFixed(2)} <span className="font-normal">({balanceText})</span>
+                Saldo: S/ {Math.abs(displayBalance).toFixed(2)} <span className="font-normal">({balanceText})</span>
               </div>
             )}
           </div>

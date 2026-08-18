@@ -11,7 +11,7 @@ import { db } from '../lib/firebase';
 import { formatLocalDate, fileToBase64, compressImageToBase64 } from '../lib/utils';
 import { ModalLiquidacion } from './ModalLiquidacion';
 import { ModalShareWhatsApp } from './ModalShareWhatsApp';
-import { generateSingleRendicionWhatsAppMessage, generateGeneralSummaryWhatsAppMessage } from '../lib/whatsapp';
+import { generateSingleRendicionWhatsAppMessage, generateGeneralSummaryWhatsAppMessage, getRendicionTotalFondos } from '../lib/whatsapp';
 import { ModalReceiptViewer } from './ModalReceiptViewer';
 
 export function DashboardAdmin() {
@@ -191,11 +191,45 @@ export function DashboardAdmin() {
   }, [rendiciones]);
 
   const stats = useMemo(() => {
-    const pending = rendiciones.filter(r => r.status === 'Pendiente').length;
-    const approved = rendiciones.filter(r => r.status === 'Aprobado').reduce((acc, r) => acc + r.totalAmount, 0);
-    const total = rendiciones.reduce((acc, r) => acc + r.totalAmount, 0);
-    return { pending, approved, total };
-  }, [rendiciones]);
+    let pending = 0;
+    let approved = 0;
+    let totalGastado = 0;
+    let totalFondos = 0;
+    let totalDevuelto = 0;
+    let totalReembolsado = 0;
+    let saldoGlobal = 0;
+
+    filteredRendiciones.forEach(r => {
+      if (r.status === 'Pendiente') pending++;
+      if (r.status === 'Aprobado') approved += (r.totalAmount || 0);
+      const { totalFondos: rFondos } = getRendicionTotalFondos(r);
+      const rGastado = r.totalAmount || 0;
+      totalGastado += rGastado;
+      totalFondos += rFondos;
+
+      if (r.liquidacion?.status === 'Liquidado') {
+        const liqMonto = r.liquidacion.monto || Math.abs(rGastado - rFondos);
+        if (r.liquidacion.type === 'Favor Empresa') {
+          totalDevuelto += liqMonto;
+        } else {
+          totalReembolsado += liqMonto;
+        }
+      } else {
+        saldoGlobal += (rGastado - rFondos);
+      }
+    });
+
+    return { 
+      pending, 
+      approved, 
+      totalGastado, 
+      totalFondos, 
+      totalDevuelto, 
+      totalReembolsado, 
+      saldoGlobal, 
+      total: totalGastado 
+    };
+  }, [filteredRendiciones]);
 
   const toggleRow = (id: string) => {
     setExpandedRow(expandedRow === id ? null : id);
@@ -340,22 +374,32 @@ export function DashboardAdmin() {
         </div>
 
         <div className={`p-5 rounded-xl border shadow-xs ${
-          stats.saldoGlobal > 0 ? 'bg-rose-50 border-rose-200' : stats.saldoGlobal < 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-blue-50 border-blue-200'
+          Math.abs(stats.saldoGlobal) < 0.01 
+            ? 'bg-emerald-50 border-emerald-200' 
+            : stats.saldoGlobal > 0 
+            ? 'bg-rose-50 border-rose-200' 
+            : 'bg-amber-50 border-amber-200'
         }`}>
           <p className={`text-xs font-bold uppercase tracking-wider ${
-            stats.saldoGlobal > 0 ? 'text-rose-800' : stats.saldoGlobal < 0 ? 'text-emerald-800' : 'text-blue-800'
+            Math.abs(stats.saldoGlobal) < 0.01 ? 'text-emerald-800' : stats.saldoGlobal > 0 ? 'text-rose-800' : 'text-amber-800'
           }`}>
-            Saldo / Liquidación
+            {Math.abs(stats.saldoGlobal) < 0.01 ? 'Saldo Pendiente (Saldado)' : 'Saldo Pendiente'}
           </p>
           <p className={`text-2xl font-black mt-1 ${
-            stats.saldoGlobal > 0 ? 'text-rose-700' : stats.saldoGlobal < 0 ? 'text-emerald-700' : 'text-blue-700'
+            Math.abs(stats.saldoGlobal) < 0.01 ? 'text-emerald-700' : stats.saldoGlobal > 0 ? 'text-rose-700' : 'text-amber-700'
           }`}>
             S/ {Math.abs(stats.saldoGlobal).toFixed(2)}
           </p>
           <p className={`text-[11px] font-bold mt-1 ${
-            stats.saldoGlobal > 0 ? 'text-rose-700' : stats.saldoGlobal < 0 ? 'text-emerald-700' : 'text-blue-700'
+            Math.abs(stats.saldoGlobal) < 0.01 ? 'text-emerald-700' : stats.saldoGlobal > 0 ? 'text-rose-700' : 'text-amber-700'
           }`}>
-            {stats.saldoGlobal > 0 ? '🔴 Favor Trabajador' : stats.saldoGlobal < 0 ? '🟢 Favor Empresa' : '🔵 Saldado'}
+            {Math.abs(stats.saldoGlobal) < 0.01 
+              ? (stats.totalDevuelto > 0 || stats.totalReembolsado > 0 
+                  ? `✅ Saldado S/ 0.00 (Liq: S/ ${stats.totalDevuelto.toFixed(2)} dev. / S/ ${stats.totalReembolsado.toFixed(2)} reemb.)`
+                  : '🔵 Cuentas Saldadas (S/ 0.00)')
+              : stats.saldoGlobal > 0 
+              ? '🔴 Favor Trabajador (Reembolso)' 
+              : '🟢 Favor Empresa (Devolución)'}
           </p>
         </div>
       </div>
@@ -413,7 +457,13 @@ export function DashboardAdmin() {
                   </td>
                 </tr>
               ) : (
-                filteredRendiciones.map((rendicion) => (
+                filteredRendiciones.map((rendicion) => {
+                  const { totalFondos } = getRendicionTotalFondos(rendicion);
+                  const isLiquidado = rendicion.liquidacion?.status === 'Liquidado';
+                  const rawBalance = totalFondos - rendicion.totalAmount;
+                  const displayBalance = isLiquidado ? 0 : rawBalance;
+
+                  return (
                   <React.Fragment key={rendicion.id}>
                   <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => toggleRow(rendicion.id)}>
                     <td className="px-6 py-4 text-gray-400">
@@ -432,11 +482,15 @@ export function DashboardAdmin() {
                       <span className="text-gray-500 bg-gray-100 px-2.5 py-0.5 rounded-full text-xs font-medium">{rendicion.comprobantes.length}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-gray-900 font-medium">S/ {rendicion.totalAmount.toFixed(2)}</div>
-                      {(rendicion.advanceAmount || 0) > 0 && (
-                        <div className="text-gray-500 text-xs mt-0.5">
-                          Adelanto: S/ {rendicion.advanceAmount.toFixed(2)}
-                          {rendicion.advanceDate && ` (F. Desembolso: ${format(new Date(rendicion.advanceDate + 'T00:00:00'), 'dd/MM/yyyy')})`}
+                      <div className="text-gray-900 font-bold">S/ {rendicion.totalAmount.toFixed(2)}</div>
+                      {totalFondos > 0 && (
+                        <div className="text-gray-500 text-xs mt-0.5 space-y-0.5">
+                          <div>Recibido: <span className="font-medium text-slate-700">S/ {totalFondos.toFixed(2)}</span></div>
+                          <div>
+                            Saldo: <span className={`font-bold ${isLiquidado ? 'text-emerald-700' : rawBalance > 0 ? 'text-amber-700' : 'text-blue-700'}`}>
+                              S/ {Math.abs(displayBalance).toFixed(2)} {isLiquidado ? '(Saldado)' : rawBalance > 0 ? '(Devolver)' : '(Reembolsar)'}
+                            </span>
+                          </div>
                         </div>
                       )}
                     </td>
@@ -643,14 +697,13 @@ export function DashboardAdmin() {
                                   </tr>
                                 ))}
                               </tbody>
-                              {(rendicion.advanceAmount || 0) > 0 && (
+                              {totalFondos > 0 && (
                                 <tfoot className="bg-gray-100">
                                   <tr>
                                     <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">
-                                      Monto Entregado (Adelanto)
-                                      {rendicion.advanceDate && ` [Desembolso: ${format(new Date(rendicion.advanceDate + 'T00:00:00'), 'dd/MM/yyyy')}]`}:
+                                      Total Fondos Recibidos:
                                     </td>
-                                    <td className="py-2 font-bold text-gray-900">S/ {rendicion.advanceAmount.toFixed(2)}</td>
+                                    <td className="py-2 font-bold text-gray-900">S/ {totalFondos.toFixed(2)}</td>
                                     <td></td>
                                   </tr>
                                   <tr>
@@ -659,8 +712,19 @@ export function DashboardAdmin() {
                                     <td></td>
                                   </tr>
                                   <tr>
-                                    <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">Saldo ({rendicion.advanceAmount - rendicion.totalAmount > 0 ? 'A Devolver' : 'A Reembolsar'}):</td>
-                                    <td className="py-2 font-bold text-gray-900">S/ {Math.abs(rendicion.advanceAmount - rendicion.totalAmount).toFixed(2)}</td>
+                                    <td colSpan={3} className="py-2 text-right font-medium text-gray-700 pr-4">
+                                      {isLiquidado 
+                                        ? 'Saldo Pendiente (Liquidado):' 
+                                        : `Saldo (${rawBalance > 0 ? 'A Devolver Empresa' : 'A Reembolsar Colaborador'}):`}
+                                    </td>
+                                    <td className={`py-2 font-bold ${isLiquidado ? 'text-emerald-700 font-extrabold' : 'text-gray-900'}`}>
+                                      S/ {isLiquidado ? '0.00' : Math.abs(rawBalance).toFixed(2)}
+                                      {isLiquidado && (
+                                        <span className="text-[10px] text-emerald-600 font-medium block">
+                                          ({rendicion.liquidacion?.type === 'Favor Empresa' ? 'Devuelto a empresa' : 'Reembolsado al trabajador'})
+                                        </span>
+                                      )}
+                                    </td>
                                     <td></td>
                                   </tr>
                                 </tfoot>
@@ -774,8 +838,9 @@ export function DashboardAdmin() {
                     </tr>
                   )}
                 </React.Fragment>
-              ))
-            )}
+              );
+            })
+          )}
             </tbody>
           </table>
         </div>

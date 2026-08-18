@@ -17,7 +17,7 @@ import { db } from '../lib/firebase';
 import { formatLocalDate, fileToBase64, compressImageToBase64 } from '../lib/utils';
 import { ModalLiquidacion } from './ModalLiquidacion';
 import { ModalShareWhatsApp } from './ModalShareWhatsApp';
-import { generateSingleRendicionWhatsAppMessage, generateGeneralSummaryWhatsAppMessage } from '../lib/whatsapp';
+import { generateSingleRendicionWhatsAppMessage, generateGeneralSummaryWhatsAppMessage, getRendicionTotalFondos } from '../lib/whatsapp';
 import { ModalReceiptViewer } from './ModalReceiptViewer';
 
 export function DashboardUser() {
@@ -77,27 +77,30 @@ export function DashboardUser() {
     let totalAdelantos = 0;
     let totalGastado = 0;
     let totalComprobantes = 0;
+    let totalDevuelto = 0;
+    let totalReembolsado = 0;
+    let saldoNeto = 0;
 
     filteredRendiciones.forEach(r => {
-      // Import or inline total funds calculation
-      const prevBal = r.previousBalance || 0;
-      let initial = 0;
-      let extra = 0;
-      if (r.ingresos && r.ingresos.length > 0) {
-        initial = r.ingresos[0]?.amount || 0;
-        if (r.ingresos.length > 1) {
-          extra = r.ingresos.slice(1).reduce((sum, i) => sum + (i.amount || 0), 0);
+      const { totalFondos } = getRendicionTotalFondos(r);
+      const rGastado = r.totalAmount || 0;
+      totalAdelantos += totalFondos;
+      totalGastado += rGastado;
+      totalComprobantes += (r.comprobantes?.length || 0);
+
+      if (r.liquidacion?.status === 'Liquidado') {
+        const liqMonto = r.liquidacion.monto || Math.abs(rGastado - totalFondos);
+        if (r.liquidacion.type === 'Favor Empresa') {
+          totalDevuelto += liqMonto;
+        } else {
+          totalReembolsado += liqMonto;
         }
       } else {
-        initial = r.advanceAmount || 0;
+        saldoNeto += (rGastado - totalFondos);
       }
-      totalAdelantos += (initial + extra + prevBal);
-      totalGastado += (r.totalAmount || 0);
-      totalComprobantes += (r.comprobantes?.length || 0);
     });
 
-    const saldoNeto = totalGastado - totalAdelantos;
-    return { totalAdelantos, totalGastado, totalComprobantes, saldoNeto };
+    return { totalAdelantos, totalGastado, totalComprobantes, saldoNeto, totalDevuelto, totalReembolsado };
   }, [filteredRendiciones]);
 
   const handleDirectUploadAttachment = async (
@@ -349,26 +352,32 @@ export function DashboardUser() {
           </div>
 
           <div className={`border rounded-xl p-3.5 ${
-            monthStats.saldoNeto > 0 
-              ? 'bg-rose-950/40 border-rose-800/50' 
-              : monthStats.saldoNeto < 0 
+            Math.abs(monthStats.saldoNeto) < 0.01 
               ? 'bg-emerald-950/40 border-emerald-800/50' 
-              : 'bg-blue-950/40 border-blue-800/50'
+              : monthStats.saldoNeto > 0 
+              ? 'bg-rose-950/40 border-rose-800/50' 
+              : 'bg-amber-950/40 border-amber-800/50'
           }`}>
             <span className={`text-[11px] font-bold uppercase tracking-wider block ${
-              monthStats.saldoNeto > 0 ? 'text-rose-300' : monthStats.saldoNeto < 0 ? 'text-emerald-300' : 'text-blue-300'
+              Math.abs(monthStats.saldoNeto) < 0.01 ? 'text-emerald-300' : monthStats.saldoNeto > 0 ? 'text-rose-300' : 'text-amber-300'
             }`}>
-              Liquidación / Saldo Resultante
+              {Math.abs(monthStats.saldoNeto) < 0.01 ? 'Liquidación / Saldo Pendiente (Saldado)' : 'Liquidación / Saldo Pendiente'}
             </span>
             <span className={`text-xl font-extrabold mt-1 block ${
-              monthStats.saldoNeto > 0 ? 'text-rose-200' : monthStats.saldoNeto < 0 ? 'text-emerald-200' : 'text-blue-200'
+              Math.abs(monthStats.saldoNeto) < 0.01 ? 'text-emerald-200' : monthStats.saldoNeto > 0 ? 'text-rose-200' : 'text-amber-200'
             }`}>
               S/ {Math.abs(monthStats.saldoNeto).toFixed(2)}
             </span>
             <span className={`text-[10px] font-bold mt-0.5 block ${
-              monthStats.saldoNeto > 0 ? 'text-rose-300/90' : monthStats.saldoNeto < 0 ? 'text-emerald-300/90' : 'text-blue-300/90'
+              Math.abs(monthStats.saldoNeto) < 0.01 ? 'text-emerald-300/90' : monthStats.saldoNeto > 0 ? 'text-rose-300/90' : 'text-amber-300/90'
             }`}>
-              {monthStats.saldoNeto > 0 ? '🔴 Favor Trabajador (Reembolso)' : monthStats.saldoNeto < 0 ? '🟢 Favor Empresa (Devolución)' : '🔵 Cuentas Saldadas'}
+              {Math.abs(monthStats.saldoNeto) < 0.01 
+                ? (monthStats.totalDevuelto > 0 || monthStats.totalReembolsado > 0 
+                    ? `✅ Saldado S/ 0.00 (Liq: S/ ${monthStats.totalDevuelto.toFixed(2)} dev. / S/ ${monthStats.totalReembolsado.toFixed(2)} reemb.)`
+                    : '🔵 Cuentas Saldadas (Saldo S/ 0.00)')
+                : monthStats.saldoNeto > 0 
+                ? '🔴 Favor Trabajador (Reembolso Pendiente)' 
+                : '🟢 Favor Empresa (Devolución Pendiente)'}
             </span>
           </div>
         </div>
@@ -395,8 +404,10 @@ export function DashboardUser() {
         ) : (
           <div className="divide-y divide-gray-200">
             {filteredRendiciones.map((rendicion) => {
-              const advance = rendicion.advanceAmount || 0;
-              const balance = advance - rendicion.totalAmount;
+              const { totalFondos } = getRendicionTotalFondos(rendicion);
+              const isLiquidado = rendicion.liquidacion?.status === 'Liquidado';
+              const rawBalance = totalFondos - rendicion.totalAmount;
+              const displayBalance = isLiquidado ? 0 : rawBalance;
               const isExpanded = !!expandedIds[rendicion.id];
               const createdDateFormatted = format(parseISO(rendicion.createdAt), 'dd MMM yyyy', { locale: es });
 
@@ -508,7 +519,7 @@ export function DashboardUser() {
                             <div className="p-3 bg-gray-50 border border-gray-200/50 rounded-xl">
                               <span className="block text-xs text-gray-500">Monto Recibido</span>
                               <span className="text-base font-extrabold text-gray-900 mt-1 block">
-                                S/ {advance.toFixed(2)}
+                                S/ {totalFondos.toFixed(2)}
                               </span>
                             </div>
                             
@@ -521,11 +532,22 @@ export function DashboardUser() {
 
                             <div className="p-3 bg-gray-50 border border-gray-200/50 rounded-xl col-span-2 sm:col-span-1">
                               <span className="block text-xs text-gray-500">
-                                {balance > 0 ? 'Por Devolver' : balance < 0 ? 'Por Reembolsar' : 'Saldo Conciliado'}
+                                {isLiquidado 
+                                  ? 'Saldo Pendiente (Saldado)' 
+                                  : rawBalance > 0 
+                                  ? 'Por Devolver (Empresa)' 
+                                  : rawBalance < 0 
+                                  ? 'Por Reembolsar (Trabajador)' 
+                                  : 'Saldo Conciliado'}
                               </span>
-                              <span className={`text-base font-extrabold mt-1 block ${balance > 0 ? 'text-amber-600' : balance < 0 ? 'text-blue-600' : 'text-green-600'}`}>
-                                S/ {Math.abs(balance).toFixed(2)}
+                              <span className={`text-base font-extrabold mt-1 block ${isLiquidado ? 'text-emerald-600' : rawBalance > 0 ? 'text-amber-600' : rawBalance < 0 ? 'text-blue-600' : 'text-green-600'}`}>
+                                S/ {Math.abs(displayBalance).toFixed(2)}
                               </span>
+                              {isLiquidado && (
+                                <span className="text-[10px] text-emerald-700 font-semibold block mt-0.5">
+                                  {rendicion.liquidacion?.type === 'Favor Empresa' ? 'Devuelto a empresa' : 'Reembolsado al trabajador'}
+                                </span>
+                              )}
                             </div>
                           </div>
 

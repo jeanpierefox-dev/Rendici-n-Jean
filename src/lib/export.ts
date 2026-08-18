@@ -752,7 +752,7 @@ export const exportSingleRendicionPDF = async (storeRendicion: Rendicion, settin
   doc.setTextColor(75, 85, 99);
   doc.text('(+) TOTAL RECIBIDO', 20, 97);
   doc.text('(-) GASTOS COMPROBADOS', 75, 97);
-  doc.text('(=) SALDO RESULTANTE', 135, 97);
+  doc.text(isLiquidado ? '(=) SALDO (SALDADO)' : '(=) SALDO RESULTANTE', 135, 97);
 
   doc.setFontSize(11);
   doc.setTextColor(17, 24, 39);
